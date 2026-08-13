@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip, Polyline } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip, Polyline, useMap } from 'react-leaflet';
 import { useNavigate } from 'react-router-dom';
 import api from '../../../services/api';
 
@@ -75,6 +75,35 @@ export default function StationConsolePage() {
   const pendingIncidents = incidents.filter(i => i.severity === 'CRITICAL' || i.severity === 'HIGH');
   const pendingFirs = firs.filter(f => f.status === 'OPEN');
 
+  const isValidCoord = (c) => c && c.length === 2 && typeof c[0] === 'number' && typeof c[1] === 'number' && c[0] !== 0 && c[1] !== 0 && c[1] >= -90 && c[1] <= 90 && c[0] >= -180 && c[0] <= 180;
+
+  const BoundsUpdater = ({ incidents, patrols, trackLocations }) => {
+    const map = useMap();
+    useEffect(() => {
+      if (incidents.length > 0 || patrols.length > 0 || trackLocations.length > 0) {
+        const bounds = [];
+        incidents.forEach(i => {
+          if (isValidCoord(i.location?.coordinates)) bounds.push([i.location.coordinates[1], i.location.coordinates[0]]);
+        });
+        patrols.forEach(p => {
+          const isActive = ['ASSIGNED', 'ACKNOWLEDGED', 'EN_ROUTE', 'ARRIVED'].includes(p.status);
+          if (!isActive) return;
+          if (isValidCoord(p.destination?.coordinates)) bounds.push([p.destination.coordinates[1], p.destination.coordinates[0]]);
+          if (isValidCoord(p.latest_location?.location?.coordinates)) bounds.push([p.latest_location.location.coordinates[1], p.latest_location.location.coordinates[0]]);
+        });
+        trackLocations.forEach(loc => {
+          if (isValidCoord(loc.location?.coordinates)) bounds.push([loc.location.coordinates[1], loc.location.coordinates[0]]);
+        });
+        if (bounds.length > 0) {
+          map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+        } else {
+          map.setView(AHMEDABAD_CENTER, 13);
+        }
+      }
+    }, [incidents, patrols, trackLocations, map]);
+    return null;
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '8px', padding: '8px', backgroundColor: 'var(--color-bg)' }}>
       {error && <div className="alert alert--error" style={{ padding: '4px', margin: 0 }}>{error}</div>}
@@ -111,24 +140,8 @@ export default function StationConsolePage() {
                 NO ACTIVE OPERATIONAL COORDINATES
               </div>
             ) : null}
-            <MapContainer center={AHMEDABAD_CENTER} zoom={13} zoomControl={false} style={{ height: '100%', width: '100%', backgroundColor: '#0b101a' }} ref={(map) => {
-              if (map && (incidents.length > 0 || patrols.length > 0)) {
-                const bounds = [];
-                incidents.forEach(i => {
-                  if (i.location?.coordinates) bounds.push([i.location.coordinates[1], i.location.coordinates[0]]);
-                });
-                patrols.forEach(p => {
-                  const isActive = ['ASSIGNED', 'ACKNOWLEDGED', 'EN_ROUTE', 'ARRIVED'].includes(p.status);
-                  if (!isActive) return;
-                  if (p.destination?.coordinates) bounds.push([p.destination.coordinates[1], p.destination.coordinates[0]]);
-                  if (p.latest_location?.location?.coordinates) bounds.push([p.latest_location.location.coordinates[1], p.latest_location.location.coordinates[0]]);
-                });
-                trackLocations.forEach(loc => {
-                  if (loc.location?.coordinates) bounds.push([loc.location.coordinates[1], loc.location.coordinates[0]]);
-                });
-                if (bounds.length > 0) map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
-              }
-            }}>
+            <MapContainer center={AHMEDABAD_CENTER} zoom={13} zoomControl={false} style={{ height: '100%', width: '100%', backgroundColor: '#0b101a' }}>
+              <BoundsUpdater incidents={incidents} patrols={patrols} trackLocations={trackLocations} />
               <TileLayer
                 attribution=''
                 url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
@@ -147,7 +160,7 @@ export default function StationConsolePage() {
               {/* Render Incidents */}
               {incidents.map((incident, idx) => {
                 const coords = incident.location?.coordinates;
-                if (!coords) return null;
+                if (!isValidCoord(coords)) return null;
                 const color = getSeverityColor(incident.severity);
                 return (
                   <CircleMarker
@@ -181,7 +194,7 @@ export default function StationConsolePage() {
                 return (
                   <React.Fragment key={`patrol-${patrol.id}`}>
                     {/* Destination Marker */}
-                    {dest && (
+                    {isValidCoord(dest) && (
                       <CircleMarker
                         center={[dest[1], dest[0]]}
                         radius={4}
@@ -201,7 +214,7 @@ export default function StationConsolePage() {
                     )}
                     
                     {/* Live GPS Marker */}
-                    {gps ? (
+                    {isValidCoord(gps) ? (
                       <CircleMarker
                         center={[gps[1], gps[0]]}
                         radius={5}
@@ -220,7 +233,7 @@ export default function StationConsolePage() {
                         </Popup>
                       </CircleMarker>
                     ) : (
-                      dest && (
+                      isValidCoord(dest) && (
                         <CircleMarker
                           center={[dest[1], dest[0]]}
                           radius={5}

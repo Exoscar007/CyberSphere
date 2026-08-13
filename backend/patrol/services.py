@@ -64,9 +64,13 @@ class PatrolService:
 
     @staticmethod
     def log_ping(user, assignment_id, lat, lng):
+        from .models import PatrolAssignment
         assignment = PatrolRepository.get_assignment(assignment_id, user)
         if not assignment:
             raise ValueError("Assignment not found or permission denied")
+        
+        if assignment.status in [PatrolAssignment.Status.COMPLETED, PatrolAssignment.Status.CANCELLED]:
+            raise ValueError("Cannot log GPS ping for completed or cancelled assignments")
         
         point = Point(float(lng), float(lat), srid=4326)
         return PatrolRepository.log_location(assignment, point)

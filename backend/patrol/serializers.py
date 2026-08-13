@@ -61,5 +61,6 @@ class PatrolAssignmentUpdateSerializer(serializers.ModelSerializer):
         fields = ('status',)
 
 class PatrolLocationInputSerializer(serializers.Serializer):
-    lat = serializers.FloatField()
-    lng = serializers.FloatField()
+    lat = serializers.FloatField(min_value=-90.0, max_value=90.0)
+    lng = serializers.FloatField(min_value=-180.0, max_value=180.0)
+

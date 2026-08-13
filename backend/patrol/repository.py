@@ -1,12 +1,16 @@
-from django.db.models import Prefetch
+from django.db.models import Prefetch, OuterRef, Subquery
 from .models import PatrolAssignment, PatrolLocation
 
 class PatrolRepository:
     @staticmethod
     def _get_base_queryset(user):
+        latest_loc_subquery = PatrolLocation.objects.filter(
+            assignment=OuterRef('assignment_id')
+        ).order_by('-timestamp').values('id')[:1]
+
         latest_location_prefetch = Prefetch(
             'locations',
-            queryset=PatrolLocation.objects.order_by('-timestamp'),
+            queryset=PatrolLocation.objects.filter(id__in=Subquery(latest_loc_subquery)),
             to_attr='prefetched_latest_locations'
         )
         
