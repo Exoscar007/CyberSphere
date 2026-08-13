@@ -39,6 +39,30 @@ class AuthService:
         return user
 
     @staticmethod
+    def get_station_patrols(user):
+        from patrol.models import PatrolAssignment
+        from django.db.models import Exists, OuterRef
+        
+        if not hasattr(user, 'station') or not user.station:
+            raise ValueError("User does not belong to a station")
+            
+        patrols = UserRepository.get_station_patrols(user.station)
+        
+        active_statuses = [
+            PatrolAssignment.Status.ASSIGNED,
+            PatrolAssignment.Status.ACKNOWLEDGED,
+            PatrolAssignment.Status.EN_ROUTE,
+            PatrolAssignment.Status.ARRIVED
+        ]
+        
+        active_assignments = PatrolAssignment.objects.filter(
+            officer=OuterRef('pk'),
+            status__in=active_statuses
+        )
+        
+        return patrols.annotate(is_busy=Exists(active_assignments))
+
+    @staticmethod
     def create_user(validated_data):
         return UserRepository.create_user(
             username=validated_data.get('username'),

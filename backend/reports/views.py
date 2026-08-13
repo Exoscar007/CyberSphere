@@ -21,3 +21,31 @@ class CrimeSummaryReportAPIView(APIView):
     def get(self, request):
         summary = ReportService.get_crime_summary()
         return Response(summary, status=status.HTTP_200_OK)
+
+from crimes.models import Incident
+from .serializers import OperationalHistoryIncidentSerializer
+
+class OperationalHistoryAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(responses={200: OperationalHistoryIncidentSerializer(many=True)})
+    def get(self, request):
+        user = request.user
+        queryset = Incident.objects.prefetch_related(
+            'patrol_assignments', 
+            'patrol_assignments__status_history', 
+            'patrol_assignments__status_history__actor',
+            'patrol_assignments__locations', 
+            'patrol_assignments__evidence',
+            'patrol_assignments__evidence__uploaded_by',
+            'evidence'
+        ).filter(patrol_assignments__isnull=False).distinct().order_by('-date_occurred')
+        
+        if user.role == 'STATION':
+            queryset = queryset.filter(station=user.station)
+        elif user.role not in ['ADMIN']:
+            return Response({"detail": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
+            
+        serializer = OperationalHistoryIncidentSerializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip, Polyline } from 'react-leaflet';
+import { useNavigate } from 'react-router-dom';
 import api from '../../../services/api';
 
 const AHMEDABAD_CENTER = [23.0225, 72.5714];
@@ -26,26 +27,69 @@ function getSeverityColor(severity) {
 }
 
 export default function OverviewPage() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [zones, setZones] = useState([]);
   const [incidents, setIncidents] = useState([]);
   const [patrols, setPatrols] = useState([]);
+  const [workload, setWorkload] = useState([]);
+  const [distribution, setDistribution] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const [selectedTrackId, setSelectedTrackId] = useState(null);
+  const [trackLocations, setTrackLocations] = useState([]);
+  
+  const handleTrackPatrol = async (id) => {
+    if (selectedTrackId === id) {
+      setSelectedTrackId(null);
+      setTrackLocations([]);
+      return;
+    }
+    setSelectedTrackId(id);
+    try {
+      const res = await api.get(`/api/patrol/assignments/${id}/locations/`);
+      setTrackLocations(res.data);
+    } catch (err) {
+      console.error("Failed to load GPS trail:", err);
+      setTrackLocations([]);
+    }
+  };
+
+  const [timeFilter, setTimeFilter] = useState('all');
+  const [severityFilter, setSeverityFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [stationFilter, setStationFilter] = useState('');
+  const [trends, setTrends] = useState([]);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       setError(null);
       try {
-        const [statsRes, zonesRes, incidentsRes, patrolsRes] = await Promise.allSettled([
-          api.get('/api/dashboard/summary/'),
-          api.get('/api/gis/heatmap/'),
-          api.get('/api/crimes/incidents/'),
-          api.get('/api/patrol/assignments/')
+        const params = new URLSearchParams();
+        if (timeFilter !== 'all') params.append('time_filter', timeFilter);
+        if (severityFilter) params.append('severity', severityFilter);
+        if (statusFilter) params.append('status', statusFilter);
+        if (stationFilter) params.append('station_id', stationFilter);
+
+        const qs = params.toString() ? `?${params.toString()}` : '';
+
+        const [statsRes, zonesRes, incidentsRes, patrolsRes, workloadRes, distRes, trendsRes] = await Promise.allSettled([
+          api.get(`/api/dashboard/summary/${qs}`),
+          api.get(`/api/gis/heatmap/`), // Heatmap can remain unfiltered or we can pass qs
+          api.get(`/api/crimes/incidents/${qs}`),
+          api.get(`/api/patrol/assignments/${qs}`),
+          api.get(`/api/dashboard/workload/${qs}`),
+          api.get(`/api/dashboard/distribution/${qs}`),
+          api.get(`/api/dashboard/trends/${qs}`)
         ]);
+        
         if (statsRes.status === 'fulfilled') setStats(statsRes.value.data);
         if (zonesRes.status === 'fulfilled') setZones(zonesRes.value.data);
+        if (workloadRes.status === 'fulfilled') setWorkload(workloadRes.value.data);
+        if (distRes.status === 'fulfilled') setDistribution(distRes.value.data);
+        if (trendsRes.status === 'fulfilled') setTrends(trendsRes.value.data);
         
         if (incidentsRes.status === 'fulfilled') {
           // Sort by severity (critical first) then date
@@ -66,7 +110,7 @@ export default function OverviewPage() {
       }
     };
     fetchData();
-  }, []);
+  }, [timeFilter, severityFilter, statusFilter, stationFilter]);
 
   if (loading) {
     return <div className="loading-spinner">INITIALIZING COMMAND INTERFACE...</div>;
@@ -80,31 +124,94 @@ export default function OverviewPage() {
     riskCounts[getRiskLabel(z.score)]++;
   });
 
+  const activePatrols = patrols.filter(p => ['ASSIGNED', 'ACKNOWLEDGED', 'EN_ROUTE', 'ARRIVED'].includes(p.status));
+  const isValidCoord = (c) => c && c.length === 2 && c[0] !== 0 && c[1] !== 0;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '8px', padding: '8px', backgroundColor: 'var(--color-bg)' }}>
       {error && <div className="alert alert--error" style={{ padding: '4px', margin: 0 }}>{error}</div>}
 
-      {/* TOP CONTROL BAR */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--color-surface)', padding: '6px 12px', border: '1px solid var(--color-border)', fontSize: '11px', fontFamily: 'var(--font-family-mono)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <span style={{ color: 'var(--color-success)', fontWeight: 'bold' }}>● LIVE</span>
-          <span style={{ color: 'var(--color-text-secondary)', cursor: 'pointer' }}>LAST 1 HOUR</span>
-          <span style={{ color: 'var(--color-text-secondary)', cursor: 'pointer' }}>24 HOURS</span>
-          <span style={{ color: 'var(--color-text-secondary)', cursor: 'pointer' }}>7 DAYS</span>
+      {/* FILTER BAR */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '4px', alignItems: 'center', backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', padding: '6px 12px' }}>
+        <span style={{ fontSize: '11px', fontWeight: 'bold', letterSpacing: '1px', marginRight: '16px' }}>COMMAND FILTERS</span>
+        
+        <div style={{ display: 'flex', gap: '4px', borderRight: '1px solid var(--color-border)', paddingRight: '16px' }}>
+          {['all', '24h', '1h'].map(tf => (
+            <button
+              key={tf}
+              onClick={() => setTimeFilter(tf)}
+              style={{
+                background: timeFilter === tf ? 'var(--color-primary)' : 'transparent',
+                color: timeFilter === tf ? 'white' : 'var(--color-text-secondary)',
+                border: '1px solid var(--color-border)',
+                padding: '4px 8px',
+                fontSize: '10px',
+                fontFamily: 'var(--font-family-mono)',
+                cursor: 'pointer'
+              }}
+            >
+              {tf === 'all' ? 'ALL TIME' : tf === '24h' ? 'LAST 24 HOURS' : 'LAST 1 HOUR'}
+            </button>
+          ))}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <select style={{ background: 'transparent', color: 'var(--color-text)', border: 'none', outline: 'none', fontFamily: 'var(--font-family-mono)', fontSize: '11px' }}>
-            <option>ALL ZONES ▼</option>
+
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <select 
+            value={severityFilter} 
+            onChange={e => setSeverityFilter(e.target.value)}
+            style={{ backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', padding: '4px 8px', fontSize: '10px', fontFamily: 'var(--font-family-mono)' }}
+          >
+            <option value="">ALL SEVERITIES</option>
+            <option value="CRITICAL">CRITICAL</option>
+            <option value="HIGH">HIGH</option>
+            <option value="MEDIUM">MEDIUM</option>
+            <option value="LOW">LOW</option>
           </select>
-          <select style={{ background: 'transparent', color: 'var(--color-text)', border: 'none', outline: 'none', fontFamily: 'var(--font-family-mono)', fontSize: '11px' }}>
-            <option>ALL INCIDENT TYPES ▼</option>
+
+          <select 
+            value={statusFilter} 
+            onChange={e => setStatusFilter(e.target.value)}
+            style={{ backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', padding: '4px 8px', fontSize: '10px', fontFamily: 'var(--font-family-mono)' }}
+          >
+            <option value="">ALL STATUSES</option>
+            <option value="OPEN">OPEN (INCIDENT)</option>
+            <option value="RESOLVED">RESOLVED (INCIDENT)</option>
+            <option value="ASSIGNED">ASSIGNED (PATROL)</option>
+            <option value="EN_ROUTE">EN_ROUTE (PATROL)</option>
+            <option value="COMPLETED">COMPLETED (PATROL)</option>
           </select>
-          <select style={{ background: 'transparent', color: 'var(--color-text)', border: 'none', outline: 'none', fontFamily: 'var(--font-family-mono)', fontSize: '11px' }}>
-            <option>ALL PRIORITIES ▼</option>
+
+          <select 
+            value={stationFilter} 
+            onChange={e => setStationFilter(e.target.value)}
+            style={{ backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', padding: '4px 8px', fontSize: '10px', fontFamily: 'var(--font-family-mono)' }}
+          >
+            <option value="">ALL STATIONS</option>
+            {workload.map(w => <option key={w.station_id} value={w.station_id}>{w.station_name}</option>)}
           </select>
-          <button style={{ background: 'var(--color-border)', color: 'var(--color-text)', border: 'none', padding: '2px 8px', fontSize: '10px', cursor: 'pointer' }}>REFRESH</button>
         </div>
       </div>
+
+      {/* KPI CARDS STRIP */}
+      {stats && (
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '4px' }}>
+          {[
+            { label: 'TOTAL INCIDENTS', value: stats.total_incidents },
+            { label: 'OPEN INCIDENTS', value: stats.open_incidents, color: 'var(--color-warning)' },
+            { label: 'CRITICAL', value: stats.critical_incidents, color: 'var(--color-danger)' },
+            { label: 'ACTIVE ASSIGNMENTS', value: stats.active_assignments, color: 'var(--color-primary-light)' },
+            { label: 'AVAILABLE PATROLS', value: stats.available_patrols, color: 'var(--color-success)' },
+            { label: 'BUSY PATROLS', value: stats.busy_patrols, color: 'var(--color-warning)' },
+            { label: 'COMPLETED ASSIGNMENTS', value: stats.completed_assignments },
+            { label: 'EVIDENCE COLLECTED', value: stats.evidence_collected }
+          ].map((kpi, idx) => (
+            <div key={idx} style={{ flex: 1, backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', padding: '6px 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ fontSize: '9px', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-family-mono)', whiteSpace: 'nowrap' }}>{kpi.label}</span>
+              <span style={{ fontSize: '14px', fontWeight: 'bold', color: kpi.color || 'var(--color-text)', fontFamily: 'var(--font-family-mono)' }}>{kpi.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* MAIN WORKSPACE */}
       <div style={{ display: 'flex', flex: 1, gap: '8px', minHeight: 0 }}>
@@ -123,49 +230,138 @@ export default function OverviewPage() {
           </div>
           
           <div style={{ flex: 1, position: 'relative' }}>
-            <MapContainer center={AHMEDABAD_CENTER} zoom={12} zoomControl={false} style={{ height: '100%', width: '100%', backgroundColor: '#0b101a' }}>
+            {(!incidents.length && !activePatrols.length) ? (
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0b101a', color: 'var(--color-text-muted)', zIndex: 10, fontFamily: 'var(--font-family-mono)', fontSize: '12px' }}>
+                NO ACTIVE OPERATIONAL COORDINATES
+              </div>
+            ) : null}
+            <MapContainer center={AHMEDABAD_CENTER} zoom={12} zoomControl={false} style={{ height: '100%', width: '100%', backgroundColor: '#0b101a' }} ref={(map) => {
+              if (map && (incidents.length > 0 || activePatrols.length > 0)) {
+                const bounds = [];
+
+                incidents.forEach(i => {
+                  if (isValidCoord(i.location?.coordinates)) bounds.push([i.location.coordinates[1], i.location.coordinates[0]]);
+                });
+                activePatrols.forEach(p => {
+                  if (isValidCoord(p.destination?.coordinates)) bounds.push([p.destination.coordinates[1], p.destination.coordinates[0]]);
+                  if (isValidCoord(p.latest_location?.location?.coordinates)) bounds.push([p.latest_location.location.coordinates[1], p.latest_location.location.coordinates[0]]);
+                });
+                trackLocations.forEach(loc => {
+                  if (isValidCoord(loc.location?.coordinates)) bounds.push([loc.location.coordinates[1], loc.location.coordinates[0]]);
+                });
+                
+                if (bounds.length > 0) {
+                  map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+                } else {
+                  map.setView(AHMEDABAD_CENTER, 12);
+                }
+              }
+            }}>
               <TileLayer
                 attribution=''
                 url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
               />
-              
-              {/* Render Risk Zones */}
-              {zones.map((zone, idx) => {
-                const coords = zone.center?.coordinates || [72.57, 23.02];
-                const color = getRiskColor(zone.score);
-                return (
-                  <CircleMarker
-                    key={`zone-${idx}`}
-                    center={[coords[1], coords[0]]}
-                    radius={Math.max(10, zone.score / 4)}
-                    pathOptions={{ color, fillColor: color, fillOpacity: 0.15, weight: 1 }}
-                  >
-                    <Tooltip permanent direction="center" className="risk-tooltip" opacity={0.6}>
-                      <span style={{ fontSize: '9px', fontWeight: 'bold', fontFamily: 'var(--font-family-mono)' }}>{zone.score?.toFixed(0)}</span>
-                    </Tooltip>
-                  </CircleMarker>
-                );
-              })}
+
+              {selectedTrackId && trackLocations.length > 0 && (
+                <Polyline 
+                  positions={trackLocations.map(loc => [loc.location.coordinates[1], loc.location.coordinates[0]])} 
+                  color="var(--color-success)" 
+                  weight={3} 
+                  opacity={0.8} 
+                  dashArray="5, 10" 
+                />
+              )}
 
               {/* Render Incidents */}
               {incidents.map((incident, idx) => {
                 const coords = incident.location?.coordinates;
-                if (!coords) return null;
+                if (!isValidCoord(coords)) return null;
                 const color = getSeverityColor(incident.severity);
                 return (
                   <CircleMarker
                     key={`inc-${idx}`}
                     center={[coords[1], coords[0]]}
-                    radius={4}
-                    pathOptions={{ color, fillColor: color, fillOpacity: 1, weight: 2 }}
+                    radius={6}
+                    pathOptions={{ color, fillColor: color, fillOpacity: 0.8, weight: 2 }}
                   >
                     <Popup>
                       <div style={{ fontFamily: 'var(--font-family-mono)', fontSize: '10px' }}>
-                        <strong style={{ color }}>{incident.severity} INCIDENT</strong><br/>
-                        {incident.title}
+                        <strong style={{ color }}>{incident.severity} INCIDENT #{incident.id}</strong><br/>
+                        <strong>Title:</strong> {incident.title}<br/>
+                        <strong>Status:</strong> {incident.status}<br/>
+                        <strong>Assigned Patrols:</strong> {incident.patrol_assignments?.length || 0}<br/>
+                        <button onClick={() => navigate('/city/history/' + incident.id)} style={{ marginTop: '8px', background: 'var(--color-primary)', border: 'none', color: 'white', padding: '4px 8px', cursor: 'pointer', width: '100%' }}>VIEW AUDIT</button>
                       </div>
                     </Popup>
                   </CircleMarker>
+                );
+              })}
+
+              {/* Render Active Patrol Destinations & GPS */}
+              {activePatrols.map((patrol, idx) => {
+                const dest = patrol.destination?.coordinates;
+                const gps = patrol.latest_location?.location?.coordinates;
+                const isTracking = selectedTrackId === patrol.id;
+                
+                return (
+                  <React.Fragment key={`patrol-${patrol.id}`}>
+                    {/* Destination Marker */}
+                    {isValidCoord(dest) && (
+                      <CircleMarker
+                        center={[dest[1], dest[0]]}
+                        radius={4}
+                        pathOptions={{ color: 'var(--color-info)', fillColor: 'var(--color-info)', fillOpacity: 0.3, weight: 2, dashArray: '4' }}
+                      >
+                        <Popup>
+                          <div style={{ fontFamily: 'var(--font-family-mono)', fontSize: '10px' }}>
+                            <strong style={{ color: 'var(--color-info)' }}>ASSIGNMENT #{patrol.id} DESTINATION</strong><br/>
+                            <strong>Incident:</strong> #{patrol.incident}<br/>
+                            <strong>Officer:</strong> {patrol.officer_username}<br/>
+                            <strong>Status:</strong> {patrol.status}<br/>
+                            <strong>Priority:</strong> {patrol.priority}<br/>
+                            <strong>Instructions:</strong> {patrol.instructions || 'None'}
+                          </div>
+                        </Popup>
+                      </CircleMarker>
+                    )}
+                    
+                    {/* Live GPS Marker */}
+                    {isValidCoord(gps) ? (
+                      <CircleMarker
+                        center={[gps[1], gps[0]]}
+                        radius={5}
+                        pathOptions={{ color: 'var(--color-success)', fillColor: 'var(--color-success)', fillOpacity: 1, weight: 2 }}
+                      >
+                        <Popup>
+                          <div style={{ fontFamily: 'var(--font-family-mono)', fontSize: '10px' }}>
+                            <strong style={{ color: 'var(--color-success)' }}>LIVE GPS: P-{String(patrol.id).padStart(3, '0')}</strong><br/>
+                            <strong>Officer:</strong> {patrol.officer_username}<br/>
+                            <strong>Status:</strong> {patrol.status}<br/>
+                            <strong>Last Ping:</strong> {new Date(patrol.latest_location.timestamp).toLocaleTimeString()}<br/>
+                            <button onClick={() => handleTrackPatrol(patrol.id)} style={{ marginTop: '8px', background: isTracking ? 'var(--color-danger)' : 'var(--color-success)', border: 'none', color: 'white', padding: '4px 8px', cursor: 'pointer', width: '100%', fontWeight: 'bold' }}>
+                              {isTracking ? 'STOP TRACKING' : 'TRACK ROUTE'}
+                            </button>
+                          </div>
+                        </Popup>
+                      </CircleMarker>
+                    ) : (
+                      isValidCoord(dest) && (
+                        <CircleMarker
+                          center={[dest[1], dest[0]]}
+                          radius={5}
+                          pathOptions={{ color: 'var(--color-warning)', fillColor: 'var(--color-warning)', fillOpacity: 1, weight: 2 }}
+                        >
+                          <Popup>
+                            <div style={{ fontFamily: 'var(--font-family-mono)', fontSize: '10px' }}>
+                              <strong style={{ color: 'var(--color-warning)' }}>LIVE GPS: P-{String(patrol.id).padStart(3, '0')}</strong><br/>
+                              <strong>Officer:</strong> {patrol.officer_username}<br/>
+                              <strong style={{ color: 'var(--color-danger)' }}>Status: GPS UNAVAILABLE</strong>
+                            </div>
+                          </Popup>
+                        </CircleMarker>
+                      )
+                    )}
+                  </React.Fragment>
                 );
               })}
             </MapContainer>
@@ -208,21 +404,33 @@ export default function OverviewPage() {
           {/* ACTIVE PATROLS */}
           <div style={{ flex: '0 0 35%', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', minHeight: 0 }}>
             <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-bg-dark)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '11px', fontWeight: 'bold', letterSpacing: '1px' }}>ACTIVE PATROL UNITS</span>
-              <span style={{ fontFamily: 'var(--font-family-mono)', fontSize: '11px', color: 'var(--color-text-secondary)' }}>{String(patrols.length).padStart(2, '0')}</span>
+              <span style={{ fontSize: '11px', fontWeight: 'bold', letterSpacing: '1px' }}>PATROL UNITS</span>
+              <span style={{ fontFamily: 'var(--font-family-mono)', fontSize: '11px', color: 'var(--color-text-secondary)' }}>{String(activePatrols.length).padStart(2, '0')}</span>
             </div>
+            {stats && (
+              <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', fontSize: '9px', fontFamily: 'var(--font-family-mono)' }}>
+                <div style={{ flex: 1, padding: '4px', textAlign: 'center', backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--color-success)' }}>
+                  AVAILABLE: <strong>{stats.available_patrols}</strong>
+                </div>
+                <div style={{ flex: 1, padding: '4px', textAlign: 'center', backgroundColor: 'rgba(245, 158, 11, 0.1)', color: 'var(--color-warning)' }}>
+                  BUSY/MISSION: <strong>{stats.busy_patrols}</strong>
+                </div>
+              </div>
+            )}
             <div style={{ flex: 1, overflowY: 'auto', padding: '0' }}>
-              {patrols.length === 0 ? (
-                <div style={{ padding: '16px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '11px', fontFamily: 'var(--font-family-mono)' }}>NO ACTIVE UNITS</div>
+              {activePatrols.length === 0 ? (
+                <div style={{ padding: '16px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '11px', fontFamily: 'var(--font-family-mono)' }}>NO ACTIVE UNITS FOUND</div>
               ) : (
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px', fontFamily: 'var(--font-family-mono)' }}>
                   <tbody>
-                    {patrols.map((patrol, idx) => (
+                    {activePatrols.map((patrol, idx) => (
                       <tr key={idx} style={{ borderBottom: '1px solid var(--color-border)' }}>
                         <td style={{ padding: '6px 12px', color: 'var(--color-primary-light)' }}>P-{String(patrol.id).padStart(3, '0')}</td>
-                        <td style={{ padding: '6px 12px', color: 'var(--color-text)' }}>{patrol.zone_name.toUpperCase()}</td>
+                        <td style={{ padding: '6px 12px', color: 'var(--color-text)' }}>{patrol.officer_username}</td>
                         <td style={{ padding: '6px 12px', textAlign: 'right' }}>
-                          <span style={{ color: 'var(--color-success)' }}>● ACTIVE</span>
+                          <span style={{ color: 'var(--color-warning)' }}>
+                            {patrol.status}
+                          </span>
                         </td>
                       </tr>
                     ))}
@@ -257,54 +465,85 @@ export default function OverviewPage() {
       </div>
 
       {/* BOTTOM INTELLIGENCE STRIP */}
-      <div style={{ display: 'flex', gap: '8px', height: '120px' }}>
+      <div style={{ display: 'flex', gap: '8px', height: '160px' }}>
         
-        {/* INCIDENT TREND */}
-        <div style={{ flex: 1, backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', padding: '6px' }}>
-          <div style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>INCIDENT TREND (24H)</div>
-          <div style={{ height: '80px', display: 'flex', alignItems: 'flex-end', gap: '4px', paddingBottom: '4px', borderBottom: '1px solid var(--color-border)' }}>
-             {/* Mock visual bars for density since we don't have a charting lib handy */}
-             {[4, 7, 3, 5, 8, 12, 9, 6, 4, 3, 7, 5, 2, 4, 8, 11, 7, 4, 3, 2, 5, 8, 9, 4].map((h, i) => (
-                <div key={i} style={{ flex: 1, backgroundColor: 'var(--color-border-light)', height: `${h * 6}px` }}></div>
-             ))}
-          </div>
+        {/* STATION WORKLOAD */}
+        <div style={{ flex: 2, backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', padding: '6px', overflowY: 'auto' }}>
+          <div style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>STATION WORKLOAD</div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px', fontFamily: 'var(--font-family-mono)' }}>
+            <thead>
+              <tr style={{ color: 'var(--color-text-muted)', textAlign: 'left', borderBottom: '1px solid var(--color-border)' }}>
+                <th style={{ padding: '4px' }}>STATION</th>
+                <th style={{ padding: '4px' }}>OPEN INCIDENTS</th>
+                <th style={{ padding: '4px' }}>ACTIVE / UNASSIGNED</th>
+                <th style={{ padding: '4px' }}>ACTIVE ASSIGN</th>
+                <th style={{ padding: '4px' }}>PATROLS (BUSY/AVAIL)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {workload.map(w => (
+                <tr key={w.station_id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                  <td style={{ padding: '4px' }}>{w.station_name}</td>
+                  <td style={{ padding: '4px', color: 'var(--color-warning)' }}>{w.open_incidents}</td>
+                  <td style={{ padding: '4px' }}>
+                    <span style={{ color: 'var(--color-primary-light)' }}>{w.incidents_with_active_patrol}</span> / <span style={{ color: 'var(--color-danger)' }}>{w.unassigned_open_incidents}</span>
+                  </td>
+                  <td style={{ padding: '4px', color: 'var(--color-primary-light)' }}>{w.active_assignments}</td>
+                  <td style={{ padding: '4px' }}>
+                    <span style={{ color: 'var(--color-warning)' }}>{w.busy_patrol_officers}</span> / <span style={{ color: 'var(--color-success)' }}>{w.available_patrol_officers}</span>
+                  </td>
+                </tr>
+              ))}
+              {workload.length === 0 && (
+                <tr><td colSpan="5" style={{ padding: '8px', textAlign: 'center', color: 'var(--color-text-muted)' }}>NO STATION DATA</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
 
         {/* INCIDENT DISTRIBUTION */}
-        <div style={{ flex: 1, backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', padding: '6px' }}>
-          <div style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>INCIDENT DISTRIBUTION</div>
+        <div style={{ flex: 1, backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', padding: '6px', overflowY: 'auto' }}>
+          <div style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>INCIDENT DISTRIBUTION (BY SEVERITY)</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '9px', fontFamily: 'var(--font-family-mono)' }}>
-              <div style={{ width: '60px', color: 'var(--color-text-secondary)' }}>THEFT</div>
-              <div style={{ flex: 1, height: '4px', backgroundColor: 'var(--color-bg)' }}><div style={{ width: '70%', height: '100%', backgroundColor: 'var(--color-info)' }}></div></div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '9px', fontFamily: 'var(--font-family-mono)' }}>
-              <div style={{ width: '60px', color: 'var(--color-text-secondary)' }}>ASSAULT</div>
-              <div style={{ flex: 1, height: '4px', backgroundColor: 'var(--color-bg)' }}><div style={{ width: '40%', height: '100%', backgroundColor: 'var(--color-warning)' }}></div></div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '9px', fontFamily: 'var(--font-family-mono)' }}>
-              <div style={{ width: '60px', color: 'var(--color-text-secondary)' }}>CYBER</div>
-              <div style={{ flex: 1, height: '4px', backgroundColor: 'var(--color-bg)' }}><div style={{ width: '25%', height: '100%', backgroundColor: 'var(--color-danger)' }}></div></div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '9px', fontFamily: 'var(--font-family-mono)' }}>
-              <div style={{ width: '60px', color: 'var(--color-text-secondary)' }}>FRAUD</div>
-              <div style={{ flex: 1, height: '4px', backgroundColor: 'var(--color-bg)' }}><div style={{ width: '55%', height: '100%', backgroundColor: 'var(--color-success)' }}></div></div>
-            </div>
+            {distribution.map(d => {
+              const color = d.severity === 'CRITICAL' ? 'var(--color-danger)' :
+                            d.severity === 'HIGH' ? 'var(--color-warning)' :
+                            d.severity === 'MEDIUM' ? 'var(--color-info)' : 'var(--color-success)';
+              return (
+                <div key={d.severity} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '9px', fontFamily: 'var(--font-family-mono)' }}>
+                  <div style={{ width: '60px', color: 'var(--color-text-secondary)' }}>{d.severity}</div>
+                  <div style={{ width: '24px', textAlign: 'right' }}>{d.count}</div>
+                  <div style={{ flex: 1, height: '4px', backgroundColor: 'var(--color-bg)' }}>
+                    <div style={{ width: `${d.percentage}%`, height: '100%', backgroundColor: color }}></div>
+                  </div>
+                  <div style={{ width: '30px', textAlign: 'right', color: 'var(--color-text-muted)' }}>{d.percentage}%</div>
+                </div>
+              );
+            })}
+            {distribution.length === 0 && <div style={{ color: 'var(--color-text-muted)', fontSize: '9px', textAlign: 'center', marginTop: '16px' }}>NO DATA</div>}
           </div>
         </div>
 
-        {/* SYSTEM STATUS */}
+        {/* INCIDENT TREND (24H) */}
         <div style={{ flex: 1, backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', padding: '6px' }}>
-          <div style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>SYSTEM STATUS</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginTop: '6px', fontSize: '9px', fontFamily: 'var(--font-family-mono)' }}>
-             <div style={{ color: 'var(--color-text-secondary)' }}>GIS DB</div><div style={{ color: 'var(--color-success)' }}>● ONLINE</div>
-             <div style={{ color: 'var(--color-text-secondary)' }}>POSTGIS</div><div style={{ color: 'var(--color-success)' }}>● ONLINE</div>
-             <div style={{ color: 'var(--color-text-secondary)' }}>AI ENGINE</div><div style={{ color: 'var(--color-success)' }}>● ONLINE</div>
-             <div style={{ color: 'var(--color-text-secondary)' }}>PATROL NET</div><div style={{ color: 'var(--color-success)' }}>● ONLINE</div>
-             <div style={{ color: 'var(--color-text-secondary)' }}>API</div><div style={{ color: 'var(--color-success)' }}>● ONLINE</div>
+          <div style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
+            <span>INCIDENT TREND (24H)</span>
+          </div>
+          <div style={{ height: '80px', display: 'flex', alignItems: 'flex-end', gap: '4px', paddingBottom: '4px', borderBottom: '1px solid var(--color-border)' }}>
+             {trends.map((t, i) => {
+                const maxCount = Math.max(1, ...trends.map(x => x.count));
+                const h = (t.count / maxCount) * 70; // 70px max height
+                return (
+                  <div key={i} title={`${t.hour_label} - ${t.count} Incidents`} style={{ flex: 1, backgroundColor: 'var(--color-primary-light)', height: `${Math.max(1, h)}px`, opacity: t.count > 0 ? 1 : 0.2 }}></div>
+                );
+             })}
+             {trends.length === 0 && <div style={{ width: '100%', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '9px' }}>NO DATA</div>}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+            <span>{trends.length > 0 ? trends[0].hour_label : ''}</span>
+            <span>{trends.length > 0 ? trends[trends.length-1].hour_label : ''}</span>
           </div>
         </div>
-
       </div>
 
     </div>

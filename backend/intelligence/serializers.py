@@ -10,6 +10,13 @@ class GeoJSONPointField(serializers.Field):
             }
         return None
 
+    def to_internal_value(self, data):
+        from django.contrib.gis.geos import Point
+        if isinstance(data, dict) and data.get('type') == 'Point' and 'coordinates' in data:
+            coords = data['coordinates']
+            return Point(float(coords[0]), float(coords[1]), srid=4326)
+        raise serializers.ValidationError("Invalid GeoJSON Point format")
+
 class CrimeTrendSerializer(serializers.ModelSerializer):
     location = GeoJSONPointField(read_only=True)
 

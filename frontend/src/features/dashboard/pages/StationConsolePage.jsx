@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip, Polyline } from 'react-leaflet';
 import { useNavigate } from 'react-router-dom';
 import api from '../../../services/api';
 
@@ -19,6 +19,25 @@ export default function StationConsolePage() {
   const [patrols, setPatrols] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const [selectedTrackId, setSelectedTrackId] = useState(null);
+  const [trackLocations, setTrackLocations] = useState([]);
+  
+  const handleTrackPatrol = async (id) => {
+    if (selectedTrackId === id) {
+      setSelectedTrackId(null);
+      setTrackLocations([]);
+      return;
+    }
+    setSelectedTrackId(id);
+    try {
+      const res = await api.get(`/api/patrol/assignments/${id}/locations/`);
+      setTrackLocations(res.data);
+    } catch (err) {
+      console.error("Failed to load GPS trail:", err);
+      setTrackLocations([]);
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -87,18 +106,43 @@ export default function StationConsolePage() {
           </div>
           
           <div style={{ flex: 1, position: 'relative' }}>
-            <MapContainer center={AHMEDABAD_CENTER} zoom={13} zoomControl={false} style={{ height: '100%', width: '100%', backgroundColor: '#0b101a' }}>
+            {(!incidents.length && !patrols.length) ? (
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0b101a', color: 'var(--color-text-muted)', zIndex: 10, fontFamily: 'var(--font-family-mono)', fontSize: '12px' }}>
+                NO ACTIVE OPERATIONAL COORDINATES
+              </div>
+            ) : null}
+            <MapContainer center={AHMEDABAD_CENTER} zoom={13} zoomControl={false} style={{ height: '100%', width: '100%', backgroundColor: '#0b101a' }} ref={(map) => {
+              if (map && (incidents.length > 0 || patrols.length > 0)) {
+                const bounds = [];
+                incidents.forEach(i => {
+                  if (i.location?.coordinates) bounds.push([i.location.coordinates[1], i.location.coordinates[0]]);
+                });
+                patrols.forEach(p => {
+                  const isActive = ['ASSIGNED', 'ACKNOWLEDGED', 'EN_ROUTE', 'ARRIVED'].includes(p.status);
+                  if (!isActive) return;
+                  if (p.destination?.coordinates) bounds.push([p.destination.coordinates[1], p.destination.coordinates[0]]);
+                  if (p.latest_location?.location?.coordinates) bounds.push([p.latest_location.location.coordinates[1], p.latest_location.location.coordinates[0]]);
+                });
+                trackLocations.forEach(loc => {
+                  if (loc.location?.coordinates) bounds.push([loc.location.coordinates[1], loc.location.coordinates[0]]);
+                });
+                if (bounds.length > 0) map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+              }
+            }}>
               <TileLayer
                 attribution=''
                 url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
               />
-              
-              {/* Fake Station Boundary for visual credibility */}
-              <CircleMarker
-                 center={AHMEDABAD_CENTER}
-                 radius={120}
-                 pathOptions={{ color: 'var(--color-border-light)', fillColor: 'transparent', weight: 1, dashArray: '4 4' }}
-              />
+
+              {selectedTrackId && trackLocations.length > 0 && (
+                <Polyline 
+                  positions={trackLocations.map(loc => [loc.location.coordinates[1], loc.location.coordinates[0]])} 
+                  color="var(--color-success)" 
+                  weight={3} 
+                  opacity={0.8} 
+                  dashArray="5, 10" 
+                />
+              )}
 
               {/* Render Incidents */}
               {incidents.map((incident, idx) => {
@@ -109,35 +153,91 @@ export default function StationConsolePage() {
                   <CircleMarker
                     key={`inc-${idx}`}
                     center={[coords[1], coords[0]]}
-                    radius={5}
-                    pathOptions={{ color, fillColor: color, fillOpacity: 0.8, weight: 1 }}
+                    radius={6}
+                    pathOptions={{ color, fillColor: color, fillOpacity: 0.8, weight: 2 }}
                   >
                     <Popup>
                       <div style={{ fontFamily: 'var(--font-family-mono)', fontSize: '10px' }}>
-                        <strong style={{ color }}>{incident.severity} INCIDENT</strong><br/>
-                        {incident.title}
+                        <strong style={{ color }}>{incident.severity} INCIDENT #{incident.id}</strong><br/>
+                        <strong>Title:</strong> {incident.title}<br/>
+                        <strong>Status:</strong> {incident.status}<br/>
+                        <strong>Assigned Patrols:</strong> {incident.patrol_assignments?.length || 0}<br/>
+                        <button onClick={() => navigate('/station/history/' + incident.id)} style={{ marginTop: '8px', background: 'var(--color-primary)', border: 'none', color: 'white', padding: '4px 8px', cursor: 'pointer', width: '100%' }}>VIEW AUDIT</button>
                       </div>
                     </Popup>
                   </CircleMarker>
                 );
               })}
 
-              {/* Render Patrols (Simulate slight offset to show them on map) */}
+              {/* Render Patrol Destinations & GPS */}
               {patrols.map((patrol, idx) => {
-                 const lat = AHMEDABAD_CENTER[0] + (Math.random() * 0.04 - 0.02);
-                 const lng = AHMEDABAD_CENTER[1] + (Math.random() * 0.04 - 0.02);
-                 return (
-                  <CircleMarker
-                    key={`patrol-${idx}`}
-                    center={[lat, lng]}
-                    radius={4}
-                    pathOptions={{ color: '#fff', fillColor: 'var(--color-info)', fillOpacity: 1, weight: 1 }}
-                  >
-                     <Tooltip permanent direction="bottom" className="risk-tooltip" opacity={0.8}>
-                      <span style={{ fontSize: '9px', fontWeight: 'bold', fontFamily: 'var(--font-family-mono)', color: 'var(--color-info)' }}>P-{String(patrol.id).padStart(3, '0')}</span>
-                    </Tooltip>
-                  </CircleMarker>
-                 )
+                const isActive = ['ASSIGNED', 'ACKNOWLEDGED', 'EN_ROUTE', 'ARRIVED'].includes(patrol.status);
+                if (!isActive) return null;
+
+                const dest = patrol.destination?.coordinates;
+                const gps = patrol.latest_location?.location?.coordinates;
+                const isTracking = selectedTrackId === patrol.id;
+
+                return (
+                  <React.Fragment key={`patrol-${patrol.id}`}>
+                    {/* Destination Marker */}
+                    {dest && (
+                      <CircleMarker
+                        center={[dest[1], dest[0]]}
+                        radius={4}
+                        pathOptions={{ color: 'var(--color-info)', fillColor: 'var(--color-info)', fillOpacity: 0.3, weight: 2, dashArray: '4' }}
+                      >
+                        <Popup>
+                          <div style={{ fontFamily: 'var(--font-family-mono)', fontSize: '10px' }}>
+                            <strong style={{ color: 'var(--color-info)' }}>ASSIGNMENT #{patrol.id} DESTINATION</strong><br/>
+                            <strong>Incident:</strong> #{patrol.incident}<br/>
+                            <strong>Officer:</strong> {patrol.officer_username}<br/>
+                            <strong>Status:</strong> {patrol.status}<br/>
+                            <strong>Priority:</strong> {patrol.priority}<br/>
+                            <strong>Instructions:</strong> {patrol.instructions || 'None'}
+                          </div>
+                        </Popup>
+                      </CircleMarker>
+                    )}
+                    
+                    {/* Live GPS Marker */}
+                    {gps ? (
+                      <CircleMarker
+                        center={[gps[1], gps[0]]}
+                        radius={5}
+                        pathOptions={{ color: 'var(--color-success)', fillColor: 'var(--color-success)', fillOpacity: 1, weight: 2 }}
+                      >
+                        <Popup>
+                          <div style={{ fontFamily: 'var(--font-family-mono)', fontSize: '10px' }}>
+                            <strong style={{ color: 'var(--color-success)' }}>LIVE GPS: P-{String(patrol.id).padStart(3, '0')}</strong><br/>
+                            <strong>Officer:</strong> {patrol.officer_username}<br/>
+                            <strong>Status:</strong> {patrol.status}<br/>
+                            <strong>Last Ping:</strong> {new Date(patrol.latest_location.timestamp).toLocaleTimeString()}<br/>
+                            <button onClick={() => handleTrackPatrol(patrol.id)} style={{ marginTop: '8px', background: isTracking ? 'var(--color-danger)' : 'var(--color-success)', border: 'none', color: 'white', padding: '4px 8px', cursor: 'pointer', width: '100%', fontWeight: 'bold' }}>
+                              {isTracking ? 'STOP TRACKING' : 'TRACK ROUTE'}
+                            </button>
+                          </div>
+                        </Popup>
+                      </CircleMarker>
+                    ) : (
+                      dest && (
+                        <CircleMarker
+                          center={[dest[1], dest[0]]}
+                          radius={5}
+                          pathOptions={{ color: 'var(--color-warning)', fillColor: 'var(--color-warning)', fillOpacity: 1, weight: 2 }}
+                        >
+                          <Popup>
+                            <div style={{ fontFamily: 'var(--font-family-mono)', fontSize: '10px' }}>
+                              <strong style={{ color: 'var(--color-warning)' }}>LIVE GPS: P-{String(patrol.id).padStart(3, '0')}</strong><br/>
+                              <strong>Officer:</strong> {patrol.officer_username}<br/>
+                              <strong>Status:</strong> WAITING FOR FIRST PING
+                            </div>
+                          </Popup>
+                        </CircleMarker>
+                      )
+                    )}
+                  </React.Fragment>
+                );
               })}
 
             </MapContainer>

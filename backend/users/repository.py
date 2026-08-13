@@ -29,3 +29,9 @@ class UserRepository:
             user.delete()
             return True
         return False
+
+    @staticmethod
+    def get_station_patrols(station):
+        if not station:
+            return CustomUser.objects.none()
+        return CustomUser.objects.filter(station=station, role__in=['PATROL', 'PATROL_OFFICER'])

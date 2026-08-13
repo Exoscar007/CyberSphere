@@ -8,6 +8,13 @@ class UserResponseSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = ('id', 'username', 'role', 'badge_number', 'phone_number')
 
+class StationPatrolSerializer(serializers.ModelSerializer):
+    is_busy = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = CustomUser
+        fields = ('id', 'username', 'badge_number', 'is_busy')
+
 class LoginRequestSerializer(serializers.Serializer):
     username = serializers.CharField()
     password = serializers.CharField(write_only=True)

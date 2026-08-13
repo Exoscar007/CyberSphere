@@ -45,6 +45,11 @@ export default function StationConsoleSidebar() {
         <NavLink to="/station/dispatch" style={({isActive}) => isActive ? {...linkStyle, ...activeStyle} : linkStyle}>
           Patrol Operations
         </NavLink>
+
+        <div style={sectionHeader}>AUDIT</div>
+        <NavLink to="/station/history" style={({isActive}) => isActive ? {...linkStyle, ...activeStyle} : linkStyle}>
+          Operational History
+        </NavLink>
       </nav>
     </aside>
   );

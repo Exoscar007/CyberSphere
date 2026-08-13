@@ -16,6 +16,11 @@ export default function IncidentPage() {
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
 
+  // New Incident Modal State
+  const [showNewModal, setShowNewModal] = useState(false);
+  const [newIncident, setNewIncident] = useState({ title: '', description: '', severity: 'HIGH', lat: 23.0225, lng: 72.5714 });
+  const [creating, setCreating] = useState(false);
+
   const fetchIncidents = async () => {
     setLoading(true);
     setError(null);
@@ -36,11 +41,39 @@ export default function IncidentPage() {
 
   useEffect(() => { fetchIncidents(); }, []);
 
-  const filtered = incidents.filter((i) =>
-    i.title?.toLowerCase().includes(search.toLowerCase()) ||
-    i.description?.toLowerCase().includes(search.toLowerCase()) ||
-    i.severity?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = incidents.filter((i) => {
+    // Only show active operational incidents (OPEN or active)
+    if (i.status === 'RESOLVED' || i.status === 'CANCELLED') return false;
+    
+    return i.title?.toLowerCase().includes(search.toLowerCase()) ||
+           i.description?.toLowerCase().includes(search.toLowerCase()) ||
+           i.severity?.toLowerCase().includes(search.toLowerCase());
+  });
+
+  const handleCreateIncident = async () => {
+    setCreating(true);
+    try {
+      const payload = {
+        title: newIncident.title,
+        description: newIncident.description,
+        severity: newIncident.severity,
+        date_occurred: new Date().toISOString(),
+        location_input: {
+          type: "Point",
+          coordinates: [parseFloat(newIncident.lng), parseFloat(newIncident.lat)]
+        }
+      };
+      await api.post('/api/crimes/incidents/', payload);
+      setShowNewModal(false);
+      setNewIncident({ title: '', description: '', severity: 'HIGH', lat: 23.0225, lng: 72.5714 });
+      fetchIncidents();
+    } catch (err) {
+      console.error("Failed to create incident:", err);
+      alert("Failed to create incident. Check required fields.");
+    } finally {
+      setCreating(false);
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '8px', padding: '8px', backgroundColor: 'var(--color-bg)' }}>
@@ -56,7 +89,7 @@ export default function IncidentPage() {
             onChange={(e) => setSearch(e.target.value)} 
             style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)', padding: '2px 6px', fontSize: '10px', fontFamily: 'var(--font-family-mono)', width: '250px' }}
           />
-          <button style={{ background: 'var(--color-primary)', border: 'none', color: '#fff', padding: '2px 8px', fontSize: '10px', cursor: 'pointer', fontFamily: 'var(--font-family-mono)' }}>NEW INCIDENT</button>
+          <button onClick={() => setShowNewModal(true)} style={{ background: 'var(--color-primary)', border: 'none', color: '#fff', padding: '2px 8px', fontSize: '10px', cursor: 'pointer', fontFamily: 'var(--font-family-mono)' }}>NEW INCIDENT</button>
         </div>
       </div>
 
@@ -85,6 +118,34 @@ export default function IncidentPage() {
                   // Generating a pseudo-ID for display density purposes since we don't have one in model
                   const displayId = `INC-${String(incident.id).padStart(4, '0')}`;
                   
+                  // Calculate Assignment Status
+                  let assignmentStatus = 'UNASSIGNED';
+                  let statusColor = 'var(--color-warning)';
+                  
+                  if (incident.patrol_assignments && incident.patrol_assignments.length > 0) {
+                    const statuses = incident.patrol_assignments.map(a => a.status);
+                    
+                    if (statuses.includes('ARRIVED')) {
+                      assignmentStatus = 'ARRIVED';
+                      statusColor = 'var(--color-danger)';
+                    } else if (statuses.includes('EN_ROUTE')) {
+                      assignmentStatus = 'EN_ROUTE';
+                      statusColor = 'var(--color-primary-light)';
+                    } else if (statuses.includes('ACKNOWLEDGED')) {
+                      assignmentStatus = 'ACKNOWLEDGED';
+                      statusColor = 'var(--color-info)';
+                    } else if (statuses.includes('ASSIGNED')) {
+                      assignmentStatus = 'ASSIGNED';
+                      statusColor = 'var(--color-success)';
+                    } else if (statuses.every(s => s === 'COMPLETED')) {
+                      assignmentStatus = 'COMPLETED';
+                      statusColor = 'var(--color-text-muted)';
+                    } else if (statuses.every(s => s === 'CANCELLED')) {
+                      assignmentStatus = 'CANCELLED';
+                      statusColor = 'var(--color-text-muted)';
+                    }
+                  }
+
                   return (
                     <tr key={incident.id} style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
                       <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary)', fontWeight: 'bold' }}>{displayId}</td>
@@ -92,11 +153,11 @@ export default function IncidentPage() {
                       <td style={{ padding: '10px 12px', color: 'var(--color-text)', maxWidth: '250px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{incident.title.toUpperCase()}</td>
                       <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary)' }}>NAVRANGPURA</td>
                       <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary)' }}>{timeStr}</td>
-                      <td style={{ padding: '10px 12px', color: 'var(--color-warning)' }}>UNASSIGNED</td>
+                      <td style={{ padding: '10px 12px', color: statusColor, fontWeight: 'bold' }}>{assignmentStatus}</td>
                       <td style={{ padding: '10px 12px', textAlign: 'right', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                        <button style={{ background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text)', padding: '2px 8px', fontSize: '9px', cursor: 'pointer', fontFamily: 'var(--font-family-mono)' }}>VIEW</button>
+                        <button onClick={() => navigate('/station/history/' + incident.id)} style={{ background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text)', padding: '2px 8px', fontSize: '9px', cursor: 'pointer', fontFamily: 'var(--font-family-mono)' }}>VIEW</button>
                         <button onClick={() => navigate('/station/firs')} style={{ background: 'transparent', border: '1px solid var(--color-primary-light)', color: 'var(--color-primary-light)', padding: '2px 8px', fontSize: '9px', cursor: 'pointer', fontFamily: 'var(--font-family-mono)' }}>CREATE FIR</button>
-                        <button onClick={() => navigate('/station/dispatch')} style={{ background: 'var(--color-info)', border: 'none', color: '#fff', padding: '2px 8px', fontSize: '9px', cursor: 'pointer', fontFamily: 'var(--font-family-mono)' }}>DISPATCH</button>
+                        <button onClick={() => navigate('/station/dispatch', { state: { incident } })} style={{ background: 'var(--color-info)', border: 'none', color: '#fff', padding: '2px 8px', fontSize: '9px', cursor: 'pointer', fontFamily: 'var(--font-family-mono)' }}>DISPATCH</button>
                       </td>
                     </tr>
                   );
@@ -108,6 +169,66 @@ export default function IncidentPage() {
         </div>
       </div>
       
+      {/* NEW INCIDENT MODAL */}
+      {showNewModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '16px', width: '400px', display: 'flex', flexDirection: 'column' }}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', color: 'white' }}>CREATE NEW INCIDENT</h3>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>TITLE / TYPE</label>
+                <input 
+                  value={newIncident.title} 
+                  onChange={e => setNewIncident({...newIncident, title: e.target.value})} 
+                  style={{ width: '100%', padding: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'white' }} 
+                />
+              </div>
+              
+              <div>
+                <label style={{ display: 'block', fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>DESCRIPTION</label>
+                <textarea 
+                  value={newIncident.description} 
+                  onChange={e => setNewIncident({...newIncident, description: e.target.value})} 
+                  style={{ width: '100%', padding: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'white', minHeight: '60px' }} 
+                />
+              </div>
+              
+              <div>
+                <label style={{ display: 'block', fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>SEVERITY</label>
+                <select 
+                  value={newIncident.severity} 
+                  onChange={e => setNewIncident({...newIncident, severity: e.target.value})} 
+                  style={{ width: '100%', padding: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'white' }}>
+                  <option value="CRITICAL">CRITICAL</option>
+                  <option value="HIGH">HIGH</option>
+                  <option value="MEDIUM">MEDIUM</option>
+                  <option value="LOW">LOW</option>
+                </select>
+              </div>
+              
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>LATITUDE</label>
+                  <input type="number" step="0.0001" value={newIncident.lat} onChange={e => setNewIncident({...newIncident, lat: e.target.value})} style={{ width: '100%', padding: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'white' }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>LONGITUDE</label>
+                  <input type="number" step="0.0001" value={newIncident.lng} onChange={e => setNewIncident({...newIncident, lng: e.target.value})} style={{ width: '100%', padding: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'white' }} />
+                </div>
+              </div>
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '24px' }}>
+              <button onClick={() => setShowNewModal(false)} style={{ background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text)', padding: '6px 16px', cursor: 'pointer' }}>CANCEL</button>
+              <button onClick={handleCreateIncident} disabled={creating} style={{ background: 'var(--color-primary)', border: 'none', color: 'white', padding: '6px 16px', cursor: 'pointer', opacity: creating ? 0.5 : 1 }}>
+                {creating ? 'CREATING...' : 'CREATE INCIDENT'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

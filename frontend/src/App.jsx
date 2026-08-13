@@ -16,6 +16,8 @@ import OverviewPage from './features/dashboard/pages/OverviewPage';
 import StationConsolePage from './features/dashboard/pages/StationConsolePage';
 import InvestigatorWorkspacePage from './features/dashboard/pages/InvestigatorWorkspacePage';
 import EvidenceReviewPage from './features/crimes/pages/EvidenceReviewPage';
+import OperationalHistoryPage from './features/reports/pages/OperationalHistoryPage';
+import IncidentAuditPage from './features/reports/pages/IncidentAuditPage';
 
 import './App.css';
 
@@ -33,6 +35,8 @@ function App() {
           <Route path="firs" element={<FIRPage />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="users" element={<UserManagementPage />} />
+          <Route path="history" element={<OperationalHistoryPage />} />
+          <Route path="history/:id" element={<IncidentAuditPage />} />
         </Route>
 
         {/* STATION CONSOLE ROUTES */}
@@ -42,6 +46,8 @@ function App() {
           <Route path="dispatch" element={<PatrolPage />} />
           <Route path="queue" element={<IncidentPage />} />
           <Route path="firs" element={<FIRPage />} />
+          <Route path="history" element={<OperationalHistoryPage />} />
+          <Route path="history/:id" element={<IncidentAuditPage />} />
         </Route>
 
 

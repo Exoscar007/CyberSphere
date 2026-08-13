@@ -3,50 +3,22 @@
 IMPORTANT: This is SYNTHETIC demonstration data for hackathon purposes.
 It does NOT represent real police records or actual crime data.
 """
-import random
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand
-from django.contrib.gis.geos import Point
+from django.contrib.gis.geos import Point, Polygon
 from django.utils import timezone
 
 from crimes.models import FIR, Complaint, Incident
 from intelligence.models import CrimeTrend
 from patrol.models import PatrolAssignment
-from users.models import CustomUser
-
-
-AHMEDABAD_LOCATIONS = [
-    # (lng, lat, area_name)
-    (72.5714, 23.0225, 'Maninagar'),
-    (72.5571, 23.0395, 'Navrangpura'),
-    (72.5136, 23.0277, 'Satellite'),
-    (72.5297, 23.0407, 'Vastrapur'),
-    (72.4714, 23.0340, 'Bopal'),
-    (72.5017, 23.0510, 'SG Highway'),
-    (72.5660, 23.0340, 'Ellis Bridge'),
-    (72.5620, 23.0135, 'Paldi'),
-    (72.5960, 23.1060, 'Chandkheda'),
-    (72.5110, 23.0880, 'Gota'),
-    (72.4970, 23.0510, 'Thaltej'),
-    (72.5060, 23.0420, 'Bodakdev'),
-    (72.6320, 23.0020, 'Isanpur'),
-    (72.5850, 23.0620, 'Shahibaug'),
-    (72.6010, 23.0100, 'Odhav'),
-]
-
-CRIME_TYPES = [
-    'Theft', 'Burglary', 'Robbery', 'Assault', 'Vandalism',
-    'Fraud', 'Vehicle Theft', 'Pickpocketing', 'Chain Snatching',
-    'Domestic Violence', 'Drug Offense', 'Cybercrime',
-]
+from users.models import CustomUser, PoliceStation
 
 
 class Command(BaseCommand):
-    help = 'Seed the database with synthetic Ahmedabad demonstration data'
+    help = 'Seed the database with synthetic deterministic Ahmedabad demonstration data'
 
     def handle(self, *args, **options):
-        random.seed(42)  # Reproducible
         now = timezone.now()
 
         self.stdout.write('Clearing existing data...')
@@ -55,95 +27,141 @@ class Command(BaseCommand):
         Incident.objects.all().delete()
         CrimeTrend.objects.all().delete()
         PatrolAssignment.objects.all().delete()
+        CustomUser.objects.filter(is_superuser=False).delete()
+        PoliceStation.objects.all().delete()
+
+        self.stdout.write('Creating Police Stations...')
+        station_navrangpura = PoliceStation.objects.create(
+            station_code='NAV-01',
+            name='Navrangpura Police Station',
+            address='Navrangpura, Ahmedabad',
+            location=Point(72.5571, 23.0395, srid=4326),
+            is_active=True
+        )
+        station_satellite = PoliceStation.objects.create(
+            station_code='SAT-02',
+            name='Satellite Police Station',
+            address='Satellite, Ahmedabad',
+            location=Point(72.5136, 23.0277, srid=4326),
+            is_active=True
+        )
 
         self.stdout.write('Creating demo users...')
-        admin = self._create_user('admin', 'admin123', 'ADMIN', 'ADM-001')
-        officer1 = self._create_user('officer_shah', 'officer123', 'POLICE_OFFICER', 'POF-101')
-        officer2 = self._create_user('officer_patel', 'officer123', 'POLICE_OFFICER', 'POF-102')
-        patrol1 = self._create_user('patrol_mehta', 'patrol123', 'PATROL_OFFICER', 'PTL-201')
-        patrol2 = self._create_user('patrol_joshi', 'patrol123', 'PATROL_OFFICER', 'PTL-202')
-        patrol3 = self._create_user('patrol_desai', 'patrol123', 'PATROL_OFFICER', 'PTL-203')
+        admin = self._create_user('admin', 'admin123', 'ADMIN', 'ADM-001', None)
+        
+        # Station Users
+        station_user1 = self._create_user('station_navrangpura', 'station123', 'STATION', 'STN-101', station_navrangpura)
+        station_user2 = self._create_user('station_satellite', 'station123', 'STATION', 'STN-102', station_satellite)
+        
+        # Patrol Officers
+        patrol1 = self._create_user('patrol_mehta', 'patrol123', 'PATROL_OFFICER', 'PTL-201', station_navrangpura)
+        patrol2 = self._create_user('patrol_joshi', 'patrol123', 'PATROL_OFFICER', 'PTL-202', station_satellite)
 
         self.stdout.write('Creating FIRs...')
-        firs_created = 0
-        for i in range(30):
-            loc = random.choice(AHMEDABAD_LOCATIONS)
-            jitter_lng = loc[0] + random.uniform(-0.01, 0.01)
-            jitter_lat = loc[1] + random.uniform(-0.01, 0.01)
-            crime = random.choice(CRIME_TYPES)
-            status = random.choice(['OPEN', 'OPEN', 'INVESTIGATING', 'CLOSED'])
-            days_ago = random.randint(1, 90)
-            FIR.objects.create(
-                fir_number=f'FIR-2026-{i+1:04d}',
-                description=f'[DEMO DATA] {crime} reported near {loc[2]}, Ahmedabad.',
-                reported_by=random.choice([officer1, officer2]),
-                location=Point(jitter_lng, jitter_lat, srid=4326),
-                status=status,
-            )
-            firs_created += 1
+        # Navrangpura FIRs
+        FIR.objects.create(
+            fir_number='FIR-NAV-001',
+            description='[DEMO DATA] Burglary reported near Navrangpura.',
+            reported_by=station_user1,
+            location=Point(72.5575, 23.0400, srid=4326),
+            status='OPEN',
+            station=station_navrangpura
+        )
+        FIR.objects.create(
+            fir_number='FIR-NAV-002',
+            description='[DEMO DATA] Theft reported near Gujarat University.',
+            reported_by=station_user1,
+            location=Point(72.5560, 23.0390, srid=4326),
+            status='INVESTIGATING',
+            station=station_navrangpura
+        )
+        # Satellite FIRs
+        FIR.objects.create(
+            fir_number='FIR-SAT-001',
+            description='[DEMO DATA] Vehicle Theft in Satellite.',
+            reported_by=station_user2,
+            location=Point(72.5140, 23.0280, srid=4326),
+            status='OPEN',
+            station=station_satellite
+        )
 
         self.stdout.write('Creating Complaints...')
-        for i in range(20):
-            status = random.choice(['PENDING', 'PENDING', 'RESOLVED'])
-            crime = random.choice(CRIME_TYPES)
-            loc = random.choice(AHMEDABAD_LOCATIONS)
-            Complaint.objects.create(
-                description=f'[DEMO DATA] Complaint regarding {crime.lower()} in {loc[2]} area.',
-                status=status,
-            )
+        Complaint.objects.create(
+            description='[DEMO DATA] Noise complaint in Navrangpura.',
+            status='PENDING',
+            station=station_navrangpura
+        )
+        Complaint.objects.create(
+            description='[DEMO DATA] Traffic issue in Satellite.',
+            status='RESOLVED',
+            station=station_satellite
+        )
 
         self.stdout.write('Creating Incidents...')
-        severities = ['LOW', 'LOW', 'MEDIUM', 'MEDIUM', 'MEDIUM', 'HIGH', 'HIGH', 'CRITICAL']
-        for i in range(50):
-            loc = random.choice(AHMEDABAD_LOCATIONS)
-            jitter_lng = loc[0] + random.uniform(-0.015, 0.015)
-            jitter_lat = loc[1] + random.uniform(-0.015, 0.015)
-            crime = random.choice(CRIME_TYPES)
-            severity = random.choice(severities)
-            days_ago = random.randint(1, 120)
-            Incident.objects.create(
-                title=f'{crime} — {loc[2]}',
-                description=f'[DEMO DATA] {crime} incident in {loc[2]}, Ahmedabad.',
-                location=Point(jitter_lng, jitter_lat, srid=4326),
-                date_occurred=now - timedelta(days=days_ago, hours=random.randint(0, 23)),
-                severity=severity,
-            )
+        Incident.objects.create(
+            title='Theft — Navrangpura',
+            description='[DEMO DATA] Theft incident.',
+            location=Point(72.5580, 23.0410, srid=4326),
+            date_occurred=now - timedelta(days=2),
+            severity='MEDIUM',
+            station=station_navrangpura
+        )
+        Incident.objects.create(
+            title='Assault — Satellite',
+            description='[DEMO DATA] Assault incident.',
+            location=Point(72.5150, 23.0290, srid=4326),
+            date_occurred=now - timedelta(days=1),
+            severity='HIGH',
+            station=station_satellite
+        )
 
         self.stdout.write('Creating Crime Trends...')
-        for crime_type in CRIME_TYPES[:8]:
-            loc = random.choice(AHMEDABAD_LOCATIONS)
-            CrimeTrend.objects.create(
-                crime_type=crime_type,
-                location=Point(loc[0], loc[1], srid=4326),
-                date_recorded=now - timedelta(days=random.randint(1, 30)),
-                frequency=random.randint(5, 50),
-            )
+        CrimeTrend.objects.create(
+            crime_type='Theft',
+            location=Point(72.5571, 23.0395, srid=4326),
+            date_recorded=now - timedelta(days=5),
+            frequency=12,
+        )
+
+        inc1 = Incident.objects.get(title='Theft — Navrangpura')
+        inc2 = Incident.objects.get(title='Assault — Satellite')
 
         self.stdout.write('Creating Patrol Assignments...')
-        patrol_officers = [patrol1, patrol2, patrol3]
-        risk_levels = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']
-        for i, officer in enumerate(patrol_officers):
-            loc = AHMEDABAD_LOCATIONS[i]
-            PatrolAssignment.objects.create(
-                officer=officer,
-                zone_name=loc[2],
-                status='ACTIVE',
-                start_time=now - timedelta(hours=random.randint(1, 4)),
-            )
+        PatrolAssignment.objects.create(
+            officer=patrol1,
+            zone_name='Navrangpura Commercial',
+            status='ASSIGNED',
+            destination=Point(72.5580, 23.0410, srid=4326),
+            instructions='[DEMO DATA] Proceed to theft location and investigate.',
+            incident=inc1,
+            start_time=now - timedelta(hours=1),
+            station=station_navrangpura
+        )
+        PatrolAssignment.objects.create(
+            officer=patrol2,
+            zone_name='Satellite Residential',
+            status='EN_ROUTE',
+            destination=Point(72.5150, 23.0290, srid=4326),
+            instructions='[DEMO DATA] Proceed to assault location immediately.',
+            incident=inc2,
+            start_time=now - timedelta(hours=2),
+            station=station_satellite
+        )
 
         self.stdout.write(self.style.SUCCESS(
-            f'\nSeed complete: {firs_created} FIRs, 20 Complaints, 50 Incidents, '
-            f'8 Crime Trends, 3 Patrol Assignments, 6 Users.\n'
+            f'\nSeed complete: Deterministic Data Loaded.\n'
             f'\nDemo credentials:\n'
             f'  Admin: admin / admin123\n'
-            f'  Officer: officer_shah / officer123\n'
-            f'  Patrol: patrol_mehta / patrol123\n'
+            f'  Station 1: station_navrangpura / station123\n'
+            f'  Station 2: station_satellite / station123\n'
+            f'  Patrol 1: patrol_mehta / patrol123\n'
+            f'  Patrol 2: patrol_joshi / patrol123\n'
         ))
 
-    def _create_user(self, username, password, role, badge):
+    def _create_user(self, username, password, role, badge, station):
         user, created = CustomUser.objects.get_or_create(
             username=username,
-            defaults={'role': role, 'badge_number': badge},
+            defaults={'role': role, 'badge_number': badge, 'station': station},
         )
         if created:
             user.set_password(password)

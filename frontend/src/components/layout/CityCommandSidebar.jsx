@@ -42,6 +42,9 @@ export default function CityCommandSidebar() {
         <NavLink to="/city/firs" style={({isActive}) => isActive ? {...linkStyle, ...activeStyle} : linkStyle}>
           Global FIRs
         </NavLink>
+        <NavLink to="/city/history" style={({isActive}) => isActive ? {...linkStyle, ...activeStyle} : linkStyle}>
+          Operational History
+        </NavLink>
 
         <div style={sectionHeader}>SYSTEM</div>
         <NavLink to="/city/users" style={({isActive}) => isActive ? {...linkStyle, ...activeStyle} : linkStyle}>

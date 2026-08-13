@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework import status
 from drf_yasg.utils import swagger_auto_schema
-from .serializers import LoginRequestSerializer, LoginResponseSerializer, UserResponseSerializer, UserManagementSerializer
+from .serializers import LoginRequestSerializer, LoginResponseSerializer, UserResponseSerializer, UserManagementSerializer, StationPatrolSerializer
 from .services import AuthService
 from .permissions import IsAdminRole
 
@@ -26,6 +26,18 @@ class ProfileAPIView(APIView):
         user = AuthService.get_profile(request.user)
         serializer = UserResponseSerializer(user)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+class StationPatrolListAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(responses={200: StationPatrolSerializer(many=True)})
+    def get(self, request):
+        try:
+            patrols = AuthService.get_station_patrols(request.user)
+            serializer = StationPatrolSerializer(patrols, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 class UserManagementAPIView(APIView):
     permission_classes = [IsAuthenticated, IsAdminRole]
