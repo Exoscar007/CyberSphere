@@ -30,6 +30,8 @@ export default function PatrolPage() {
   const [submitLoading, setSubmitLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [recommendLoading, setRecommendLoading] = useState(false);
+  const [recommendations, setRecommendations] = useState(null);
   
   const [formData, setFormData] = useState({ 
     officer: '', 
@@ -87,11 +89,27 @@ export default function PatrolPage() {
   const handleIncidentChange = (e) => {
     const id = e.target.value;
     setSelectedIncidentId(id);
+    setRecommendations(null);
     const inc = incidents.find(i => String(i.id) === String(id));
     if (inc && inc.location_input && inc.location_input.coordinates) {
        const coords = inc.location_input.coordinates;
        setMapCenter([coords[1], coords[0]]);
        setDestination(null);
+    }
+  };
+
+  const handleRecommend = async () => {
+    if (!selectedIncidentId) return;
+    setRecommendLoading(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await api.get(`/api/gis/recommend-patrol/?incident_id=${selectedIncidentId}`);
+      setRecommendations(res.data);
+    } catch (err) {
+      setError(err.response?.data?.detail || err.response?.data?.error || 'Failed to get recommendations.');
+    } finally {
+      setRecommendLoading(false);
     }
   };
 
@@ -196,7 +214,14 @@ export default function PatrolPage() {
           <div className="card__title" style={{ marginBottom: 'var(--space-md)' }}>Dispatch Configuration</div>
           
           <div className="form-group">
-            <label className="form-label">Target Incident</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+              <label className="form-label" style={{ margin: 0 }}>Target Incident</label>
+              {selectedIncidentId && (
+                <button type="button" onClick={handleRecommend} disabled={recommendLoading} style={{ background: 'var(--color-primary)', border: 'none', color: '#fff', padding: '4px 8px', fontSize: '10px', cursor: 'pointer', fontFamily: 'var(--font-family-mono)', borderRadius: '2px' }}>
+                  {recommendLoading ? 'ANALYZING...' : 'RECOMMEND PATROL'}
+                </button>
+              )}
+            </div>
             <select className="form-input" value={selectedIncidentId} onChange={handleIncidentChange}>
               <option value="">-- Select Incident --</option>
               {incidents.map(inc => (
@@ -206,6 +231,32 @@ export default function PatrolPage() {
               ))}
             </select>
           </div>
+
+          {recommendations && (
+            <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: 'rgba(0, 200, 255, 0.05)', border: '1px solid rgba(0, 200, 255, 0.2)', borderRadius: '4px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--color-info)', marginBottom: '8px', letterSpacing: '1px' }}>RECOMMENDED PATROLS</div>
+              {recommendations.length === 0 ? (
+                <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>No available patrols found.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {recommendations.map(r => (
+                    <div key={r.patrol_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--color-surface)', padding: '8px', borderRadius: '4px', border: '1px solid var(--color-border)' }}>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: 'bold' }}>{r.officer_name.toUpperCase()} {r.badge_number && `[${r.badge_number}]`}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{r.station} | {(r.distance_meters / 1000).toFixed(2)} km away</div>
+                      </div>
+                      <button type="button" onClick={() => {
+                        setFormData(prev => ({ ...prev, officer: String(r.patrol_id) }));
+                        setRecommendations(null); // hide after selection
+                      }} style={{ background: 'var(--color-success)', border: 'none', color: '#fff', padding: '4px 12px', fontSize: '11px', cursor: 'pointer', borderRadius: '2px', fontWeight: 'bold' }}>
+                        SELECT
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <form onSubmit={handleSubmit}>
             <div className="form-group">

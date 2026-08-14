@@ -7,6 +7,36 @@ from drf_yasg import openapi
 from crimes.serializers import IncidentSerializer
 from intelligence.serializers import RiskScoreSerializer
 from .services import GISService
+from dashboard.services import DashboardService
+
+class RecommendPatrolAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        if request.user.role not in ['ADMIN', 'STATION']:
+            return Response({"detail": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+            
+        incident_id = request.query_params.get('incident_id')
+        if not incident_id:
+            return Response({"error": "incident_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        station_id = request.user.station_id if request.user.role == 'STATION' else None
+        
+        candidates = GISService.recommend_patrol(incident_id, station_id)
+        if candidates is None:
+            return Response({"error": "Incident not found."}, status=status.HTTP_404_NOT_FOUND)
+            
+        return Response(candidates, status=status.HTTP_200_OK)
+
+class StationWorkloadAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role not in ['ADMIN', 'STATION']:
+            return Response({"detail": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+        time_filter = request.query_params.get('time_filter')
+        workload = DashboardService.get_workload(request.user, time_filter)
+        return Response(workload, status=status.HTTP_200_OK)
 
 class NearbyIncidentsAPIView(APIView):
     permission_classes = [IsAuthenticated]
