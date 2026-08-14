@@ -20,7 +20,7 @@ class AIPredictionService:
         try:
             AIPredictionService._run_prediction_pipeline(job)
         except Exception as e:
-            AIPredictionRepository.update_job_status(job.id, 'FAILED', str(e))
+            job = AIPredictionRepository.update_job_status(job.id, 'FAILED', str(e))
             job.completed_at = timezone.now()
             job.save()
         return job
@@ -32,7 +32,7 @@ class AIPredictionService:
         crime_points = AIPredictionService._gather_crime_data()
 
         if len(crime_points) < 3:
-            AIPredictionRepository.update_job_status(
+            job = AIPredictionRepository.update_job_status(
                 job.id, 'COMPLETED',
                 f'Insufficient data ({len(crime_points)} points). Minimum 3 required.'
             )
@@ -87,7 +87,7 @@ class AIPredictionService:
                 score=float(row['risk_score']),
             )
 
-        AIPredictionRepository.update_job_status(
+        job = AIPredictionRepository.update_job_status(
             job.id, 'COMPLETED',
             f'K-Means clustering identified {n_clusters} risk zones from {len(df)} crime records.'
         )
@@ -96,18 +96,22 @@ class AIPredictionService:
 
     @staticmethod
     def _gather_crime_data():
-        """Collect geo-located crime data from Incidents and FIRs."""
+        """Collect geo-located crime data from Incidents and FIRs (last 30 days only)."""
+        from datetime import timedelta
+        
         severity_map = {'LOW': 0.2, 'MEDIUM': 0.4, 'HIGH': 0.7, 'CRITICAL': 1.0}
         points = []
+        
+        cutoff_date = timezone.now() - timedelta(days=30)
 
-        for incident in Incident.objects.exclude(location__isnull=True):
+        for incident in Incident.objects.filter(date_occurred__gte=cutoff_date).exclude(location__isnull=True):
             points.append([
                 incident.location.x,
                 incident.location.y,
                 severity_map.get(incident.severity, 0.4),
             ])
 
-        for fir in FIR.objects.exclude(location__isnull=True):
+        for fir in FIR.objects.filter(date_reported__gte=cutoff_date).exclude(location__isnull=True):
             status_severity = 0.7 if fir.status == 'OPEN' else 0.4
             points.append([fir.location.x, fir.location.y, status_severity])
 

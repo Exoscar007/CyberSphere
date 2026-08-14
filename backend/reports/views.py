@@ -49,3 +49,20 @@ class OperationalHistoryAPIView(APIView):
         serializer = OperationalHistoryIncidentSerializer(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+
+class ResponseTimeAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        if user.role == 'PATROL_OFFICER':
+            return Response({"detail": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
+            
+        station_id = user.station_id if user.role == 'STATION' else None
+        
+        from .services import ResponseTimeService
+        data = ResponseTimeService.calculate_response_times(station_id=station_id)
+        
+        # Strip out station specifics for station users to only see theirs, which is handled by service
+        # but ensure they don't see "by_station" for other stations just in case.
+        return Response(data, status=status.HTTP_200_OK)

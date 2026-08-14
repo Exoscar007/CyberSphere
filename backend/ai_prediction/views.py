@@ -6,8 +6,10 @@ from drf_yasg.utils import swagger_auto_schema
 from .serializers import PredictionJobSerializer
 from .services import AIPredictionService
 
+from users.permissions import IsAdminRole
+
 class TriggerPredictionAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminRole]
 
     @swagger_auto_schema(responses={202: PredictionJobSerializer})
     def post(self, request):

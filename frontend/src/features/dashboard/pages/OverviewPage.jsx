@@ -36,6 +36,7 @@ export default function OverviewPage() {
   const [distribution, setDistribution] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [responseTimes, setResponseTimes] = useState(null);
 
   const [selectedTrackId, setSelectedTrackId] = useState(null);
   const [trackLocations, setTrackLocations] = useState([]);
@@ -75,14 +76,15 @@ export default function OverviewPage() {
 
         const qs = params.toString() ? `?${params.toString()}` : '';
 
-        const [statsRes, zonesRes, incidentsRes, patrolsRes, workloadRes, distRes, trendsRes] = await Promise.allSettled([
+        const [statsRes, zonesRes, incidentsRes, patrolsRes, workloadRes, distRes, trendsRes, responseTimesRes] = await Promise.allSettled([
           api.get(`/api/dashboard/summary/${qs}`),
           api.get(`/api/gis/heatmap/`), // Heatmap can remain unfiltered or we can pass qs
           api.get(`/api/crimes/incidents/${qs}`),
           api.get(`/api/patrol/assignments/${qs}`),
           api.get(`/api/dashboard/workload/${qs}`),
           api.get(`/api/dashboard/distribution/${qs}`),
-          api.get(`/api/dashboard/trends/${qs}`)
+          api.get(`/api/dashboard/trends/${qs}`),
+          api.get(`/api/reports/response-times/`)
         ]);
         
         if (statsRes.status === 'fulfilled') setStats(statsRes.value.data);
@@ -90,6 +92,7 @@ export default function OverviewPage() {
         if (workloadRes.status === 'fulfilled') setWorkload(workloadRes.value.data);
         if (distRes.status === 'fulfilled') setDistribution(distRes.value.data);
         if (trendsRes.status === 'fulfilled') setTrends(trendsRes.value.data);
+        if (responseTimesRes.status === 'fulfilled') setResponseTimes(responseTimesRes.value.data);
         
         if (incidentsRes.status === 'fulfilled') {
           // Sort by severity (critical first) then date
@@ -549,6 +552,36 @@ export default function OverviewPage() {
             <span>{trends.length > 0 ? trends[0].hour_label : ''}</span>
             <span>{trends.length > 0 ? trends[trends.length-1].hour_label : ''}</span>
           </div>
+        </div>
+
+        {/* RESPONSE TIMES */}
+        <div style={{ flex: 1, backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', padding: '6px', overflowY: 'auto' }}>
+          <div style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>RESPONSE TIMES</div>
+          {(!responseTimes || responseTimes.assignments_analyzed === 0) ? (
+            <div style={{ color: 'var(--color-text-muted)', fontSize: '9px', textAlign: 'center', marginTop: '16px' }}>NO RESPONSE-TIME DATA AVAILABLE</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px', fontFamily: 'var(--font-family-mono)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
+                <span style={{ color: 'var(--color-text-secondary)' }}>DSP → ENR:</span>
+                <span style={{ color: 'var(--color-primary-light)' }}>{Math.round(responseTimes.summary.average_assignment_to_en_route_seconds / 60)} m</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
+                <span style={{ color: 'var(--color-text-secondary)' }}>ENR → ARR:</span>
+                <span style={{ color: 'var(--color-warning)' }}>{Math.round(responseTimes.summary.average_en_route_to_arrived_seconds / 60)} m</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
+                <span style={{ color: 'var(--color-text-secondary)' }}>DSP → ARR:</span>
+                <span style={{ color: 'var(--color-danger)' }}>{Math.round(responseTimes.summary.average_assignment_to_arrived_seconds / 60)} m</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
+                <span style={{ color: 'var(--color-text-secondary)' }}>ARR → CMP:</span>
+                <span style={{ color: 'var(--color-success)' }}>{Math.round(responseTimes.summary.average_arrived_to_completed_seconds / 60)} m</span>
+              </div>
+              <div style={{ borderTop: '1px solid var(--color-border)', marginTop: '4px', paddingTop: '4px', fontSize: '8px', color: 'var(--color-text-muted)', textAlign: 'right' }}>
+                {responseTimes.assignments_analyzed} ASSIGNMENTS
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
