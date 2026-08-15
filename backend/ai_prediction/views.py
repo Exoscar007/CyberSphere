@@ -27,3 +27,12 @@ class PredictionJobStatusAPIView(APIView):
             return Response({"error": "Job not found."}, status=status.HTTP_404_NOT_FOUND)
         serializer = PredictionJobSerializer(job)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+class ForecastAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(responses={200: 'Forecast data'})
+    def get(self, request):
+        from .services import TemporalForecastingService
+        result = TemporalForecastingService.generate_forecast()
+        return Response(result, status=status.HTTP_200_OK)

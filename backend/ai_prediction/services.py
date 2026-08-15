@@ -120,3 +120,148 @@ class AIPredictionService:
     @staticmethod
     def get_job_status(job_id):
         return AIPredictionRepository.get_job(job_id)
+
+class TemporalForecastingService:
+    @staticmethod
+    def generate_forecast():
+        from django.db.models.functions import TruncDate
+        from django.db.models import Count
+        from crimes.models import Incident
+        from datetime import timedelta
+
+        daily_counts = list(
+            Incident.objects.annotate(date=TruncDate('date_occurred'))
+            .values('date')
+            .annotate(count=Count('id'))
+            .order_by('date')
+        )
+
+        if not daily_counts:
+            return {
+                'status': 'insufficient_data',
+                'days_available': 0,
+                'days_required': 14,
+                'message': 'At least 14 days of historical incident data required.',
+                'forecast': None
+            }
+            
+        start_date = daily_counts[0]['date']
+        end_date = daily_counts[-1]['date']
+        
+        if hasattr(start_date, 'date'):
+            start_date = start_date.date()
+        if hasattr(end_date, 'date'):
+            end_date = end_date.date()
+
+        days_available = (end_date - start_date).days + 1
+        
+        if days_available < 14:
+            return {
+                'status': 'insufficient_data',
+                'days_available': days_available,
+                'days_required': 14,
+                'message': 'At least 14 days of historical incident data required.',
+                'forecast': None
+            }
+
+        clean_date_map = {}
+        for item in daily_counts:
+            dt = item['date']
+            dt_val = dt.date() if hasattr(dt, 'date') else dt
+            clean_date_map[dt_val] = item['count']
+
+        history = []
+        for i in range(days_available):
+            dt = start_date + timedelta(days=i)
+            history.append({
+                'date': dt,
+                'day_of_week': dt.weekday(),
+                'count': clean_date_map.get(dt, 0)
+            })
+
+        weights = [0.4, 0.3, 0.2, 0.1]
+        
+        def predict_wsma(target_date, hist_data):
+            target_dow = target_date.weekday()
+            same_dow_counts = [x['count'] for x in hist_data if x['day_of_week'] == target_dow]
+            same_dow_counts.reverse()
+            
+            use_counts = same_dow_counts[:4]
+            if not use_counts:
+                return 0
+            
+            use_weights = weights[:len(use_counts)]
+            norm_weights = [w / sum(use_weights) for w in use_weights]
+            
+            return sum(c * w for c, w in zip(use_counts, norm_weights))
+            
+        def predict_seasonal_naive(target_date, hist_data):
+            target_dow = target_date.weekday()
+            same_dow_counts = [x['count'] for x in hist_data if x['day_of_week'] == target_dow]
+            if not same_dow_counts:
+                return 0
+            return same_dow_counts[-1]
+
+        test_days = min(60, days_available - 14) 
+        if test_days > 0:
+            train_end_idx = days_available - test_days
+            test_data = history[train_end_idx:]
+            
+            wsma_errors = []
+            naive_errors = []
+            
+            for i, test_day in enumerate(test_data):
+                current_hist = history[:train_end_idx + i]
+                pred_wsma = predict_wsma(test_day['date'], current_hist)
+                pred_naive = predict_seasonal_naive(test_day['date'], current_hist)
+                actual = test_day['count']
+                wsma_errors.append(abs(actual - pred_wsma))
+                naive_errors.append(abs(actual - pred_naive))
+                
+            model_mae = sum(wsma_errors) / len(wsma_errors)
+            baseline_mae = sum(naive_errors) / len(naive_errors)
+        else:
+            model_mae = 0.0
+            baseline_mae = 0.0
+
+        forecast = []
+        sim_history = history.copy()
+        day_names = {0: 'Monday', 1: 'Tuesday', 2: 'Wednesday', 3: 'Thursday', 4: 'Friday', 5: 'Saturday', 6: 'Sunday'}
+        
+        for i in range(1, 8):
+            target_date = end_date + timedelta(days=i)
+            pred = predict_wsma(target_date, sim_history)
+            
+            forecast.append({
+                'date': target_date.isoformat(),
+                'day_of_week': day_names[target_date.weekday()],
+                'predicted_count': round(pred)
+            })
+            
+            sim_history.append({
+                'date': target_date,
+                'day_of_week': target_date.weekday(),
+                'count': pred
+            })
+
+        return {
+            'status': 'ok',
+            'model': 'weighted_seasonal_moving_average',
+            'lookback_weeks': 4,
+            'horizon_days': 7,
+            'training_period': {
+                'start': start_date.isoformat(),
+                'end': end_date.isoformat(),
+                'days_available': days_available
+            },
+            'forecast': forecast,
+            'validation': {
+                'method': 'walk_forward_chronological',
+                'test_period_days': test_days,
+                'model_mae': round(model_mae, 2),
+                'baseline_mae': round(baseline_mae, 2),
+                'baseline_model': 'seasonal_naive',
+                'model_outperforms_baseline': model_mae < baseline_mae if test_days > 0 else True,
+            },
+            'disclaimer': 'Forecast based on historical patterns. For planning purposes only.'
+        }

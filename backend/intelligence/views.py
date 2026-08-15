@@ -23,3 +23,13 @@ class RiskScoreListAPIView(APIView):
         scores = IntelligenceService.get_risk_scores()
         serializer = RiskScoreSerializer(scores, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+class TemporalStatsAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(responses={200: 'Temporal statistics'})
+    def get(self, request):
+        station_id = request.query_params.get('station_id')
+        from .services import TemporalAnalyticsService
+        stats = TemporalAnalyticsService.get_temporal_stats(station_id)
+        return Response(stats, status=status.HTTP_200_OK)

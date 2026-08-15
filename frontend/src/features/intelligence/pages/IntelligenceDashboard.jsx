@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip } from 'react-leaflet';
 import api from '../../../services/api';
+import TemporalPanel from '../components/TemporalPanel';
+
 
 const AHMEDABAD_CENTER = [23.0225, 72.5714];
 
@@ -230,6 +232,8 @@ export default function IntelligenceDashboard() {
           </div>
         </div>
       </div>
+
+      <TemporalPanel />
     </div>
   );
 }
