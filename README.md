@@ -111,6 +111,81 @@ The `seed_demo_data` command creates several safe, local-only demo accounts to e
 - **Operational History**: Advanced combinable time/severity/status filtering for historical analysis.
 - **AI Intelligence**: Temporal crime forecasting and risk density mapping.
 
+## Mobile Application
+CyberSphere includes a Flutter-based mobile application designed for Patrol Officers in the field. It connects directly to the central Django backend and provides a focused operational workflow for receiving assignments, transmitting GPS telemetry, navigating to incidents, and uploading evidence.
+
+### Mobile Features
+- **Patrol Authentication**: Login securely using JWT-based API endpoints.
+- **Active Assignment Visibility**: Automatically fetches the current highest-priority active dispatch assignment.
+- **Location & GPS Tracking**: Continuous GPS telemetry pinging to the backend, enabling the City Command map to track units in real-time.
+- **Operational Status Workflow**: Update assignment status sequentially (`ASSIGNED` → `ACKNOWLEDGED` → `EN ROUTE` → `ARRIVED` → `COMPLETED`).
+- **Navigation Integration**: Seamless handoff to Google Maps or native OS navigation for incident routing.
+- **Evidence Capture**: Camera and gallery integration for capturing and uploading incident evidence directly to the backend.
+
+### Mobile Project Structure
+```text
+mobile/
+├── android/             # Android native configuration
+├── ios/                 # iOS native configuration
+├── lib/
+│   ├── config.dart      # API connection configuration
+│   ├── main.dart        # Flutter entry point
+│   └── screens/         # UI screens (home_screen, login_screen)
+└── pubspec.yaml         # Flutter dependencies
+```
+
+### Mobile Setup
+To run the mobile app, you need the Flutter SDK and a device/emulator.
+
+1. Install Flutter (v3.12+ recommended).
+2. Open a new terminal and navigate to the `mobile` directory:
+```bash
+cd mobile
+flutter pub get
+```
+3. Run the app on an active Android emulator or connected device:
+```bash
+flutter run
+```
+
+### Backend Connection
+The mobile application uses `lib/config.dart` to determine the backend API URL. 
+- **Android Emulator**: Uses `http://10.0.2.2:8000` to reach the host machine's backend.
+- **iOS Simulator / Web**: Uses `http://localhost:8000`.
+Ensure the backend is running via Docker before starting the mobile app.
+
+### Mobile Demo Flow
+1. Start the CyberSphere backend and database (`docker compose up`).
+2. Seed the demo data if not already done.
+3. Start the mobile app (`flutter run`).
+4. Login using the Patrol Officer demo account (Username: `patrol_mehta`, Password: `patrol123`).
+5. Ensure location permissions are granted when prompted.
+6. Acknowledge your assigned incident and cycle through the status updates (`EN_ROUTE`, `ARRIVED`).
+7. Watch the City Command web dashboard automatically update your GPS location and assignment status in real-time.
+
+## Architecture Overview
+The CyberSphere ecosystem operates on a unified backend:
+
+```text
+City Command Web (Vite/React)
+        ↓
+Station Dashboard Web (Vite/React)
+        ↓
+CyberSphere Backend API (Django/DRF)
+        ↓
+PostgreSQL / PostGIS (Database)
+        ↑
+Mobile Patrol Application (Flutter)
+```
+Both the Web and Mobile applications communicate with the identical REST APIs to ensure complete real-time synchronization between the field and the command center.
+
+## MVP Scope
+### Web Application
+Designed for **Commanders and Dispatchers**. Provides city-wide overviews, localized station workloads, advanced geospatial filtering, historical analysis, AI predictions, and assignment dispatching.
+
+### Mobile Application
+Designed strictly for **Patrol Officers in the field**. Provides a streamlined, singular view of their current assignment, location tracking, and status updating. It does not include dispatching, AI forecasting, or historical analysis capabilities.
+
 ## Environment Variables
 A `.env.example` file is provided in the `backend/` directory. If you run via Docker, `docker-compose.yml` injects the necessary environment variables automatically.
 
@@ -158,6 +233,11 @@ docker compose down -v
 docker compose up --build
 ```
 Then re-run the seed command.
+
+### Mobile: Connection Refused / Network Offline
+If the mobile app displays "NETWORK OFFLINE" or fails to connect:
+- Ensure your backend is running.
+- If using a physical Android device, the emulator loopback `10.0.2.2` will not work. You must change `apiBaseUrl` in `lib/config.dart` to your computer's local IP address (e.g., `192.168.1.X`) and ensure both devices are on the same Wi-Fi network.
 
 ## Development Commands
 
