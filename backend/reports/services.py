@@ -39,10 +39,10 @@ from django.db.models import Prefetch
 
 class ResponseTimeService:
     @staticmethod
-    def calculate_response_times(station_id=None):
+    def calculate_response_times(station_id=None, time_filter=None, severity=None, status=None, start_date=None, end_date=None):
         qs = PatrolAssignment.objects.prefetch_related('status_history')
-        if station_id:
-            qs = qs.filter(station_id=station_id)
+        from dashboard.services import DashboardService
+        qs = DashboardService._apply_filters(qs, 'assignment', time_filter, severity, status, station_id, start_date, end_date)
 
         assignments = list(qs)
         

@@ -26,17 +26,42 @@ function getSeverityColor(severity) {
   return 'var(--color-success)';
 }
 
-export default function OverviewPage() {
-  const navigate = useNavigate();
-  const [stats, setStats] = useState(null);
-  const [zones, setZones] = useState([]);
-  const [incidents, setIncidents] = useState([]);
-  const [patrols, setPatrols] = useState([]);
-  const [workload, setWorkload] = useState([]);
-  const [distribution, setDistribution] = useState([]);
+function useDashboardData(endpoint, qs) {
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [responseTimes, setResponseTimes] = useState(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    api.get(`${endpoint}${qs}`, { signal: controller.signal })
+      .then(res => {
+        setData(res.data);
+        setError(null);
+      })
+      .catch(err => {
+        if (err.name !== 'CanceledError' && err.message !== 'canceled' && err.code !== 'ERR_CANCELED') {
+          setError(err.message || 'Failed to fetch');
+        }
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+      
+    return () => controller.abort();
+  }, [endpoint, qs]);
+
+  return { data, loading, error };
+}
+
+export default function OverviewPage() {
+  const navigate = useNavigate();
+  const [timeFilter, setTimeFilter] = useState('7d');
+  const [severityFilter, setSeverityFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [stationFilter, setStationFilter] = useState('');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
 
   const [selectedTrackId, setSelectedTrackId] = useState(null);
   const [trackLocations, setTrackLocations] = useState([]);
@@ -57,67 +82,40 @@ export default function OverviewPage() {
     }
   };
 
-  const [timeFilter, setTimeFilter] = useState('all');
-  const [severityFilter, setSeverityFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [stationFilter, setStationFilter] = useState('');
-  const [trends, setTrends] = useState([]);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const params = new URLSearchParams();
-        if (timeFilter !== 'all') params.append('time_filter', timeFilter);
-        if (severityFilter) params.append('severity', severityFilter);
-        if (statusFilter) params.append('status', statusFilter);
-        if (stationFilter) params.append('station_id', stationFilter);
-
-        const qs = params.toString() ? `?${params.toString()}` : '';
-
-        const [statsRes, zonesRes, incidentsRes, patrolsRes, workloadRes, distRes, trendsRes, responseTimesRes] = await Promise.allSettled([
-          api.get(`/api/dashboard/summary/${qs}`),
-          api.get(`/api/gis/heatmap/`), // Heatmap can remain unfiltered or we can pass qs
-          api.get(`/api/crimes/incidents/${qs}`),
-          api.get(`/api/patrol/assignments/${qs}`),
-          api.get(`/api/dashboard/workload/${qs}`),
-          api.get(`/api/dashboard/distribution/${qs}`),
-          api.get(`/api/dashboard/trends/${qs}`),
-          api.get(`/api/reports/response-times/`)
-        ]);
-        
-        if (statsRes.status === 'fulfilled') setStats(statsRes.value.data);
-        if (zonesRes.status === 'fulfilled') setZones(zonesRes.value.data);
-        if (workloadRes.status === 'fulfilled') setWorkload(workloadRes.value.data);
-        if (distRes.status === 'fulfilled') setDistribution(distRes.value.data);
-        if (trendsRes.status === 'fulfilled') setTrends(trendsRes.value.data);
-        if (responseTimesRes.status === 'fulfilled') setResponseTimes(responseTimesRes.value.data);
-        
-        if (incidentsRes.status === 'fulfilled') {
-          // Sort by severity (critical first) then date
-          const sorted = incidentsRes.value.data.sort((a, b) => {
-            const sevWeight = { 'CRITICAL': 4, 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1 };
-            return (sevWeight[b.severity] || 0) - (sevWeight[a.severity] || 0);
-          });
-          setIncidents(sorted);
-        }
-        
-        if (patrolsRes.status === 'fulfilled') {
-          setPatrols(patrolsRes.value.data);
-        }
-      } catch (err) {
-        setError('Failed to load command data.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, [timeFilter, severityFilter, statusFilter, stationFilter]);
-
-  if (loading) {
-    return <div className="loading-spinner">INITIALIZING COMMAND INTERFACE...</div>;
+  const params = new URLSearchParams();
+  if (timeFilter !== 'all') params.append('time_filter', timeFilter);
+  if (severityFilter) params.append('severity', severityFilter);
+  if (statusFilter) params.append('status', statusFilter);
+  if (stationFilter) params.append('station_id', stationFilter);
+  if (timeFilter === 'custom') {
+    if (customStart) params.append('start_date', customStart);
+    if (customEnd) params.append('end_date', customEnd);
   }
+  const qs = params.toString() ? `?${params.toString()}` : '';
+
+  const { data: stats, loading: statsLoading, error: statsError } = useDashboardData('/api/dashboard/summary/', qs);
+  const { data: zonesData } = useDashboardData('/api/gis/heatmap/', qs);
+  const { data: rawIncidents, loading: incidentsLoading } = useDashboardData('/api/crimes/incidents/', qs ? qs + '&light=true' : '?light=true');
+  const { data: patrolsData, loading: patrolsLoading } = useDashboardData('/api/patrol/assignments/', qs);
+  const { data: workloadData, loading: workloadLoading } = useDashboardData('/api/dashboard/workload/', qs);
+  const { data: distData, loading: distLoading } = useDashboardData('/api/dashboard/distribution/', qs);
+  const { data: trendsData, loading: trendsLoading } = useDashboardData('/api/dashboard/trends/', qs);
+  const { data: responseTimesData, loading: responseTimesLoading } = useDashboardData('/api/reports/response-times/', qs);
+
+  const incidents = React.useMemo(() => {
+    if (!rawIncidents) return [];
+    return [...rawIncidents].sort((a, b) => {
+      const sevWeight = { 'CRITICAL': 4, 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1 };
+      return (sevWeight[b.severity] || 0) - (sevWeight[a.severity] || 0);
+    });
+  }, [rawIncidents]);
+  
+  const workload = workloadData || [];
+  const distribution = distData || [];
+  const trends = trendsData || [];
+  const responseTimes = responseTimesData || null;
+  const zones = zonesData || [];
+  const error = statsError;
 
   // Derived stats
   const criticalIncidents = incidents.filter(i => i.severity === 'CRITICAL');
@@ -127,7 +125,7 @@ export default function OverviewPage() {
     riskCounts[getRiskLabel(z.score)]++;
   });
 
-  const activePatrols = patrols.filter(p => ['ASSIGNED', 'ACKNOWLEDGED', 'EN_ROUTE', 'ARRIVED'].includes(p.status));
+  const activePatrols = (patrolsData || []).filter(p => ['ASSIGNED', 'ACKNOWLEDGED', 'EN_ROUTE', 'ARRIVED'].includes(p.status));
   const isValidCoord = (c) => c && c.length === 2 && typeof c[0] === 'number' && typeof c[1] === 'number' && c[0] !== 0 && c[1] !== 0 && c[1] >= -90 && c[1] <= 90 && c[0] >= -180 && c[0] <= 180;
 
   const BoundsUpdater = ({ incidents, activePatrols, trackLocations }) => {
@@ -164,14 +162,22 @@ export default function OverviewPage() {
       <div style={{ display: 'flex', gap: '8px', marginBottom: '4px', alignItems: 'center', backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', padding: '6px 12px' }}>
         <span style={{ fontSize: '11px', fontWeight: 'bold', letterSpacing: '1px', marginRight: '16px' }}>COMMAND FILTERS</span>
         
-        <div style={{ display: 'flex', gap: '4px', borderRight: '1px solid var(--color-border)', paddingRight: '16px' }}>
-          {['all', '24h', '1h'].map(tf => (
+        <div style={{ display: 'flex', gap: '4px', borderRight: '1px solid var(--color-border)', paddingRight: '16px', flexWrap: 'wrap' }}>
+          {[
+            { id: '1h', label: 'LAST 1 HOUR' },
+            { id: '24h', label: 'LAST 24 HOURS' },
+            { id: '7d', label: 'LAST 7 DAYS' },
+            { id: '30d', label: 'LAST 30 DAYS' },
+            { id: 'month', label: 'CURRENT MONTH' },
+            { id: 'custom', label: 'CUSTOM RANGE' },
+            { id: 'all', label: 'ALL TIME' }
+          ].map(tf => (
             <button
-              key={tf}
-              onClick={() => setTimeFilter(tf)}
+              key={tf.id}
+              onClick={() => setTimeFilter(tf.id)}
               style={{
-                background: timeFilter === tf ? 'var(--color-primary)' : 'transparent',
-                color: timeFilter === tf ? 'white' : 'var(--color-text-secondary)',
+                background: timeFilter === tf.id ? 'var(--color-primary)' : 'transparent',
+                color: timeFilter === tf.id ? 'white' : 'var(--color-text-secondary)',
                 border: '1px solid var(--color-border)',
                 padding: '4px 8px',
                 fontSize: '10px',
@@ -179,7 +185,7 @@ export default function OverviewPage() {
                 cursor: 'pointer'
               }}
             >
-              {tf === 'all' ? 'ALL TIME' : tf === '24h' ? 'LAST 24 HOURS' : 'LAST 1 HOUR'}
+              {tf.label}
             </button>
           ))}
         </div>
@@ -218,11 +224,34 @@ export default function OverviewPage() {
             <option value="">ALL STATIONS</option>
             {workload.map(w => <option key={w.station_id} value={w.station_id}>{w.station_name}</option>)}
           </select>
+          
+          {timeFilter === 'custom' && (
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginLeft: '8px' }}>
+              <span style={{ fontSize: '10px', fontFamily: 'var(--font-family-mono)', color: 'var(--color-text-secondary)' }}>CUSTOM:</span>
+              <input 
+                type="date" 
+                value={customStart} 
+                onChange={e => setCustomStart(e.target.value)}
+                style={{ backgroundColor: 'var(--color-bg-dark)', color: 'var(--color-text)', border: '1px solid var(--color-border)', padding: '2px 4px', fontSize: '10px', fontFamily: 'var(--font-family-mono)' }}
+              />
+              <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>TO</span>
+              <input 
+                type="date" 
+                value={customEnd} 
+                onChange={e => setCustomEnd(e.target.value)}
+                style={{ backgroundColor: 'var(--color-bg-dark)', color: 'var(--color-text)', border: '1px solid var(--color-border)', padding: '2px 4px', fontSize: '10px', fontFamily: 'var(--font-family-mono)' }}
+              />
+            </div>
+          )}
         </div>
       </div>
 
       {/* KPI CARDS STRIP */}
-      {stats && (
+      {statsLoading ? (
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '4px', height: '45px', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+          <span style={{ fontSize: '11px', fontFamily: 'var(--font-family-mono)', color: 'var(--color-text-muted)' }}>LOADING COMMAND KPIs...</span>
+        </div>
+      ) : stats && (
         <div style={{ display: 'flex', gap: '8px', marginBottom: '4px' }}>
           {[
             { label: 'TOTAL INCIDENTS', value: stats.total_incidents },
@@ -298,7 +327,7 @@ export default function OverviewPage() {
                         <strong style={{ color }}>{incident.severity} INCIDENT #{incident.id}</strong><br/>
                         <strong>Title:</strong> {incident.title}<br/>
                         <strong>Status:</strong> {incident.status}<br/>
-                        <strong>Assigned Patrols:</strong> {incident.patrol_assignments?.length || 0}<br/>
+                        <strong>Assigned Patrols:</strong> {incident.patrol_assignments_count !== undefined ? incident.patrol_assignments_count : incident.patrol_assignments?.length || 0}<br/>
                         <button onClick={() => navigate('/city/history/' + incident.id)} style={{ marginTop: '8px', background: 'var(--color-primary)', border: 'none', color: 'white', padding: '4px 8px', cursor: 'pointer', width: '100%' }}>VIEW AUDIT</button>
                       </div>
                     </Popup>

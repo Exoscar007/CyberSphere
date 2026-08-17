@@ -3,17 +3,20 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../../services/api';
 
 export default function OperationalHistoryPage() {
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchHistory();
-  }, []);
+  }, [year, month]);
 
   const fetchHistory = async () => {
     try {
-      const res = await api.get('/api/reports/operational-history/');
+      setLoading(true);
+      const res = await api.get(`/api/reports/operational-history/?year=${year}&month=${month}`);
       setHistory(res.data);
     } catch (error) {
       console.error("Failed to fetch operational history", error);
@@ -27,18 +30,58 @@ export default function OperationalHistoryPage() {
     navigate(`${incidentId}`);
   };
 
-  if (loading) {
-    return <div style={{ padding: '24px', color: 'white' }}>Loading operational history...</div>;
-  }
+  // Use loading state gracefully in render instead of early return, to keep UI stable
+  // if (loading) {
+  //   return <div style={{ padding: '24px', color: 'white' }}>Loading operational history...</div>;
+  // }
 
   return (
     <div style={{ padding: '24px', color: 'white' }}>
-      <h1 style={{ marginBottom: '8px', fontSize: '24px', fontWeight: 'bold' }}>Operational History</h1>
-      <p style={{ color: 'var(--color-text-muted)', marginBottom: '24px' }}>
-        Complete audit trail of all dispatched and completed incidents, assignments, and evidence.
-      </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+        <div>
+          <h1 style={{ marginBottom: '8px', fontSize: '24px', fontWeight: 'bold' }}>Operational History</h1>
+          <p style={{ color: 'var(--color-text-muted)', margin: 0 }}>
+            Complete audit trail of all dispatched and completed incidents, assignments, and evidence.
+          </p>
+        </div>
 
-      {history.length === 0 ? (
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', backgroundColor: 'var(--color-surface)', padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+          <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginRight: '8px' }}>FILTER:</span>
+          <select 
+            value={year} 
+            onChange={(e) => setYear(Number(e.target.value))}
+            style={{ backgroundColor: 'var(--color-bg-dark)', color: 'white', border: '1px solid var(--color-border)', padding: '6px 12px', borderRadius: '4px', fontSize: '14px', fontFamily: 'var(--font-family-mono)' }}
+          >
+            {[2024, 2025, 2026, 2027].map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+          <select 
+            value={month} 
+            onChange={(e) => setMonth(Number(e.target.value))}
+            style={{ backgroundColor: 'var(--color-bg-dark)', color: 'white', border: '1px solid var(--color-border)', padding: '6px 12px', borderRadius: '4px', fontSize: '14px', fontFamily: 'var(--font-family-mono)' }}
+          >
+            <option value={1}>JAN</option>
+            <option value={2}>FEB</option>
+            <option value={3}>MAR</option>
+            <option value={4}>APR</option>
+            <option value={5}>MAY</option>
+            <option value={6}>JUN</option>
+            <option value={7}>JUL</option>
+            <option value={8}>AUG</option>
+            <option value={9}>SEP</option>
+            <option value={10}>OCT</option>
+            <option value={11}>NOV</option>
+            <option value={12}>DEC</option>
+          </select>
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ padding: '24px', backgroundColor: 'var(--color-surface)', borderRadius: '8px', textAlign: 'center' }}>
+          Loading operational history...
+        </div>
+      ) : history.length === 0 ? (
         <div style={{ padding: '24px', backgroundColor: 'var(--color-surface)', borderRadius: '8px', textAlign: 'center' }}>
           No operational history found.
         </div>

@@ -20,6 +20,14 @@ export default function StationConsolePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const [workload, setWorkload] = useState(null);
+  
+  const [timeFilter, setTimeFilter] = useState('1h');
+  const [severityFilter, setSeverityFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+
   const [selectedTrackId, setSelectedTrackId] = useState(null);
   const [trackLocations, setTrackLocations] = useState([]);
   
@@ -43,10 +51,22 @@ export default function StationConsolePage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [incRes, firRes, patRes] = await Promise.allSettled([
-          api.get('/api/crimes/incidents/'),
-          api.get('/api/crimes/fir/'),
-          api.get('/api/patrol/assignments/')
+        const params = new URLSearchParams();
+        if (timeFilter !== 'all') params.append('time_filter', timeFilter);
+        if (severityFilter) params.append('severity', severityFilter);
+        if (statusFilter) params.append('status', statusFilter);
+        if (timeFilter === 'custom') {
+          if (customStart) params.append('start_date', customStart);
+          if (customEnd) params.append('end_date', customEnd);
+        }
+
+        const qs = params.toString() ? `?${params.toString()}` : '';
+
+        const [incRes, firRes, patRes, workRes] = await Promise.allSettled([
+          api.get(`/api/crimes/incidents/${qs}`),
+          api.get('/api/crimes/fir/'), // FIR might not be filtered by time in this view, keeping it as is
+          api.get(`/api/patrol/assignments/${qs}`),
+          api.get(`/api/dashboard/workload/${qs}`)
         ]);
         
         if (incRes.status === 'fulfilled') {
@@ -60,6 +80,11 @@ export default function StationConsolePage() {
         
         if (firRes.status === 'fulfilled') setFirs(firRes.value.data);
         if (patRes.status === 'fulfilled') setPatrols(patRes.value.data);
+        
+        if (workRes.status === 'fulfilled') {
+          const wl = workRes.value.data;
+          if (wl && wl.length > 0) setWorkload(wl[0]); // station user gets array of 1
+        }
 
       } catch (err) {
         setError('Failed to load station jurisdiction data.');
@@ -68,7 +93,7 @@ export default function StationConsolePage() {
       }
     };
     fetchData();
-  }, []);
+  }, [timeFilter, severityFilter, statusFilter, customStart, customEnd]);
 
   if (loading) return <div className="loading-spinner">ESTABLISHING SECURE CONNECTION TO STATION JURISDICTION...</div>;
 
@@ -118,6 +143,108 @@ export default function StationConsolePage() {
           <span style={{ color: 'var(--color-success)' }}>● LIVE STATUS</span>
           <span style={{ color: 'var(--color-text-secondary)' }}>LAST SYNC: {new Date().toLocaleTimeString()}</span>
         </div>
+      </div>
+
+      {/* FILTER BAR & WORKLOAD */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '4px', alignItems: 'flex-start' }}>
+        
+        {/* FILTERS */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', padding: '6px 12px' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', fontWeight: 'bold', letterSpacing: '1px', marginRight: '16px' }}>COMMAND FILTERS</span>
+            
+            <div style={{ display: 'flex', gap: '4px', borderRight: '1px solid var(--color-border)', paddingRight: '16px', flexWrap: 'wrap' }}>
+              {[
+                { id: '1h', label: 'LAST 1 HOUR' },
+                { id: '24h', label: 'LAST 24 HOURS' },
+                { id: '7d', label: 'LAST 7 DAYS' },
+                { id: '30d', label: 'LAST 30 DAYS' },
+                { id: 'month', label: 'CURRENT MONTH' },
+                { id: 'custom', label: 'CUSTOM RANGE' }
+              ].map(tf => (
+                <button
+                  key={tf.id}
+                  onClick={() => setTimeFilter(tf.id)}
+                  style={{
+                    background: timeFilter === tf.id ? 'var(--color-primary)' : 'transparent',
+                    color: timeFilter === tf.id ? 'white' : 'var(--color-text-secondary)',
+                    border: '1px solid var(--color-border)',
+                    padding: '4px 8px',
+                    fontSize: '10px',
+                    fontFamily: 'var(--font-family-mono)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {tf.label}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <select 
+                value={severityFilter} 
+                onChange={e => setSeverityFilter(e.target.value)}
+                style={{ backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', padding: '4px 8px', fontSize: '10px', fontFamily: 'var(--font-family-mono)' }}
+              >
+                <option value="">ALL SEVERITIES</option>
+                <option value="CRITICAL">CRITICAL</option>
+                <option value="HIGH">HIGH</option>
+                <option value="MEDIUM">MEDIUM</option>
+                <option value="LOW">LOW</option>
+              </select>
+
+              <select 
+                value={statusFilter} 
+                onChange={e => setStatusFilter(e.target.value)}
+                style={{ backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', padding: '4px 8px', fontSize: '10px', fontFamily: 'var(--font-family-mono)' }}
+              >
+                <option value="">ALL STATUSES</option>
+                <option value="OPEN">OPEN (INCIDENT)</option>
+                <option value="RESOLVED">RESOLVED (INCIDENT)</option>
+                <option value="ASSIGNED">ASSIGNED (PATROL)</option>
+                <option value="EN_ROUTE">EN_ROUTE (PATROL)</option>
+                <option value="COMPLETED">COMPLETED (PATROL)</option>
+              </select>
+            </div>
+          </div>
+          
+          {timeFilter === 'custom' && (
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
+              <span style={{ fontSize: '10px', fontFamily: 'var(--font-family-mono)', color: 'var(--color-text-secondary)' }}>CUSTOM RANGE:</span>
+              <input 
+                type="date" 
+                value={customStart} 
+                onChange={e => setCustomStart(e.target.value)}
+                style={{ backgroundColor: 'var(--color-bg-dark)', color: 'var(--color-text)', border: '1px solid var(--color-border)', padding: '2px 4px', fontSize: '10px', fontFamily: 'var(--font-family-mono)' }}
+              />
+              <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>TO</span>
+              <input 
+                type="date" 
+                value={customEnd} 
+                onChange={e => setCustomEnd(e.target.value)}
+                style={{ backgroundColor: 'var(--color-bg-dark)', color: 'var(--color-text)', border: '1px solid var(--color-border)', padding: '2px 4px', fontSize: '10px', fontFamily: 'var(--font-family-mono)' }}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* WORKLOAD SUMMARY */}
+        {workload && (
+          <div style={{ display: 'flex', gap: '4px', flexWrap: 'nowrap' }}>
+            {[
+              { label: 'NEW / RECENT', value: workload.open_incidents, color: 'var(--color-danger)' },
+              { label: 'OPEN INCIDENTS', value: workload.open_incidents, color: 'var(--color-warning)' },
+              { label: 'UNASSIGNED', value: workload.unassigned_open_incidents, color: 'var(--color-primary-light)' },
+              { label: 'ACTIVE PATROLS', value: workload.active_assignments, color: 'var(--color-info)' },
+              { label: 'COMPLETED TODAY', value: workload.completed_assignments, color: 'var(--color-success)' }
+            ].map((kpi, idx) => (
+              <div key={idx} style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', padding: '6px 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minWidth: '100px' }}>
+                <span style={{ fontSize: '9px', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-family-mono)', whiteSpace: 'nowrap' }}>{kpi.label}</span>
+                <span style={{ fontSize: '14px', fontWeight: 'bold', color: kpi.color || 'var(--color-text)', fontFamily: 'var(--font-family-mono)' }}>{kpi.value}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* MAIN WORKSPACE */}
@@ -328,20 +455,25 @@ export default function StationConsolePage() {
               <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-bg-dark)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '11px', fontWeight: 'bold', letterSpacing: '1px' }}>PATROL UNITS</span>
               </div>
-              <div style={{ flex: 1, overflowY: 'auto', padding: '0' }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '0', display: 'flex', flexDirection: 'column' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px', fontFamily: 'var(--font-family-mono)' }}>
                   <tbody>
-                    {patrols.map((patrol, idx) => (
+                    {patrols.filter(p => p.status !== 'COMPLETED').map((patrol, idx) => (
                       <tr key={idx} style={{ borderBottom: '1px solid var(--color-border)' }}>
                         <td style={{ padding: '6px 8px', color: 'var(--color-text)' }}>P-{String(patrol.id).padStart(3, '0')}</td>
                         <td style={{ padding: '6px 8px', textAlign: 'right' }}>
-                          <span style={{ color: patrol.status === 'ACTIVE' ? 'var(--color-success)' : 'var(--color-info)' }}>● {patrol.status}</span>
+                          <span style={{ color: patrol.status === 'ACTIVE' || patrol.status === 'ASSIGNED' || patrol.status === 'EN_ROUTE' ? 'var(--color-success)' : 'var(--color-info)' }}>● {patrol.status}</span>
                         </td>
                       </tr>
                     ))}
-                    {patrols.length === 0 && <tr><td colSpan="2" style={{ padding: '16px', textAlign: 'center', color: 'var(--color-text-muted)' }}>NO ACTIVE UNITS</td></tr>}
+                    {patrols.filter(p => p.status !== 'COMPLETED').length === 0 && <tr><td colSpan="2" style={{ padding: '16px', textAlign: 'center', color: 'var(--color-text-muted)' }}>NO ACTIVE UNITS</td></tr>}
                   </tbody>
                 </table>
+                <div style={{ marginTop: 'auto', padding: '8px', borderTop: '1px solid var(--color-border)', textAlign: 'center', backgroundColor: 'var(--color-bg-dark)' }}>
+                  <button onClick={() => navigate('/station/history')} style={{ background: 'transparent', border: 'none', color: 'var(--color-primary-light)', fontSize: '10px', cursor: 'pointer', fontFamily: 'var(--font-family-mono)', fontWeight: 'bold', width: '100%' }}>
+                    VIEW PATROL HISTORY &rarr;
+                  </button>
+                </div>
               </div>
             </div>
 

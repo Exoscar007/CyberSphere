@@ -59,6 +59,15 @@ class IncidentSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         return CrimeService.create_incident(validated_data)
 
+class DashboardIncidentSerializer(serializers.ModelSerializer):
+    location = GeoJSONPointField(read_only=True)
+    patrol_assignments_count = serializers.IntegerField(read_only=True, default=0)
+
+    class Meta:
+        model = Incident
+        fields = ('id', 'title', 'description', 'location', 'date_occurred', 'severity', 'status', 'patrol_assignments_count')
+
+
 class IncidentSerializerUpdate(serializers.ModelSerializer):
     class Meta:
         model = Incident

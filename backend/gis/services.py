@@ -7,7 +7,7 @@ class GISService:
         return GISRepository.get_nearby_incidents(float(lat), float(lng), float(radius_km))
 
     @staticmethod
-    def get_risk_heatmap():
+    def get_risk_heatmap(time_filter=None, severity=None, status=None, station_id=None, start_date=None, end_date=None):
         return GISRepository.get_all_risk_zones()
 
     @staticmethod

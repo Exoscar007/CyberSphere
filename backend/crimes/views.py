@@ -58,9 +58,22 @@ class IncidentListCreateAPIView(APIView):
             time_filter=request.query_params.get('time_filter'),
             severity=request.query_params.get('severity'),
             status=request.query_params.get('status'),
-            station_id=request.query_params.get('station_id')
+            station_id=request.query_params.get('station_id'),
+            start_date=request.query_params.get('start_date'),
+            end_date=request.query_params.get('end_date')
         )
-        serializer = IncidentSerializer(incidents, many=True)
+        is_light = request.query_params.get('light') == 'true'
+        
+        if is_light:
+            from django.db.models import Count
+            incidents = incidents.annotate(patrol_assignments_count=Count('patrol_assignments', distinct=True))
+            from .serializers import DashboardIncidentSerializer
+            serializer = DashboardIncidentSerializer(incidents, many=True)
+        else:
+            incidents = incidents.prefetch_related('patrol_assignments')
+            from .serializers import IncidentSerializer
+            serializer = IncidentSerializer(incidents, many=True)
+            
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(request_body=IncidentSerializer, responses={201: IncidentSerializer})

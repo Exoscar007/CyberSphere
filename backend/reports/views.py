@@ -46,6 +46,19 @@ class OperationalHistoryAPIView(APIView):
         elif user.role not in ['ADMIN']:
             return Response({"detail": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
             
+        year = request.query_params.get('year')
+        month = request.query_params.get('month')
+        if year:
+            try:
+                queryset = queryset.filter(date_occurred__year=int(year))
+            except ValueError:
+                pass
+        if month:
+            try:
+                queryset = queryset.filter(date_occurred__month=int(month))
+            except ValueError:
+                pass
+            
         serializer = OperationalHistoryIncidentSerializer(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -58,10 +71,19 @@ class ResponseTimeAPIView(APIView):
         if user.role == 'PATROL_OFFICER':
             return Response({"detail": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
             
-        station_id = user.station_id if user.role == 'STATION' else None
+        if user.role == 'STATION':
+            station_id = user.station_id
+        else:
+            station_id = request.query_params.get('station_id')
+            
+        time_filter = request.query_params.get('time_filter')
+        severity = request.query_params.get('severity')
+        status_filter = request.query_params.get('status')
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
         
         from .services import ResponseTimeService
-        data = ResponseTimeService.calculate_response_times(station_id=station_id)
+        data = ResponseTimeService.calculate_response_times(station_id=station_id, time_filter=time_filter, severity=severity, status=status_filter, start_date=start_date, end_date=end_date)
         
         # Strip out station specifics for station users to only see theirs, which is handled by service
         # but ensure they don't see "by_station" for other stations just in case.

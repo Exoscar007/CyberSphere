@@ -63,6 +63,13 @@ class HeatmapAPIView(APIView):
 
     @swagger_auto_schema(responses={200: RiskScoreSerializer(many=True)})
     def get(self, request):
-        scores = GISService.get_risk_heatmap()
+        time_filter = request.query_params.get('time_filter')
+        severity = request.query_params.get('severity')
+        status_filter = request.query_params.get('status')
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+        station_id = request.query_params.get('station_id')
+        
+        scores = GISService.get_risk_heatmap(time_filter=time_filter, severity=severity, status=status_filter, station_id=station_id, start_date=start_date, end_date=end_date)
         serializer = RiskScoreSerializer(scores, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)

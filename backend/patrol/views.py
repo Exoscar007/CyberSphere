@@ -33,7 +33,9 @@ class PatrolAssignmentListCreateAPIView(APIView):
             time_filter=request.query_params.get('time_filter'),
             severity=request.query_params.get('severity'),
             status=request.query_params.get('status'),
-            station_id=request.query_params.get('station_id')
+            station_id=request.query_params.get('station_id'),
+            start_date=request.query_params.get('start_date'),
+            end_date=request.query_params.get('end_date')
         )
         
         # If no status filter provided, preserve original default behavior of active only
