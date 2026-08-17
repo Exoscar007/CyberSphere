@@ -1,263 +1,133 @@
-# CyberSphere
+# 1 Project Overview
 
-CyberSphere is a next-generation Command & Control Intelligence platform for law enforcement. It provides real-time geospatial tracking, AI-driven crime prediction, and centralized dispatch capabilities.
+CyberSphere is a next-generation Command & Control Intelligence platform for law enforcement. It solves the fragmentation between dispatch centers and field units by providing real-time geospatial tracking, AI-driven crime prediction, and centralized operational capabilities on a unified platform.
 
-## Quick Start
+# 2 Features
 
-### Prerequisites
-For Windows development, you must have the following installed:
-- **Git** (Required)
-- **Docker Desktop** (Required - for the PostGIS database and Django backend)
-- **Node.js** (v18+) and **npm** (Required - for the React frontend)
-- **WSL2** (Highly Recommended for Docker performance on Windows)
+- **City Command Dashboard:** Real-time city-wide monitoring with progressive loading and AbortController request management for high performance.
+- **Station Operations:** Localized dashboard for managing jurisdictional FIRs and dispatching local units.
+- **Incident & FIR Management:** Centralized reporting system with accurate geospatial tagging.
+- **Patrol Operations & Tracking:** Real-time officer assignments and simulated live GPS tracking on a unified map.
+- **AI Intelligence:** Temporal crime forecasting and risk density mapping for predictive policing.
+- **Mobile Field App:** Dedicated Flutter application for Patrol Officers to view active assignments, update statuses sequentially (`EN ROUTE` -> `ARRIVED` -> `COMPLETED`), upload evidence, and provide continuous GPS telemetry to the command center.
 
-### Clone Repository
+# 3 Tech Stack
+
+- **Frontend (Web):** React (v19) & Vite - Used for the web dashboards with Leaflet/React-Leaflet for high-performance mapping.
+- **Backend (API):** Python & Django (v5.2) with Django REST Framework - Serves as the centralized API for both web and mobile clients.
+- **Database:** PostgreSQL with PostGIS Extension - Handles complex geospatial queries (e.g., `ST_DWithin`) and standard relational data.
+- **Mobile Application:** Flutter (v3.12+) - Cross-platform mobile app for officers, integrating `geolocator` for live tracking and `image_picker` for evidence upload.
+- **AI & Data Analysis:** scikit-learn, pandas, numpy - Powers the AI prediction models and historical trend analytics.
+- **Infrastructure:** Docker & Docker Compose - Containerizes the backend and PostGIS database to ensure a consistent, local environment.
+
+# 4 Architecture
+
+```text
+City Command Web (Vite/React)
+         ↓
+Station Dashboard Web (Vite/React)
+         ↓
+CyberSphere Backend API (Django/DRF)
+         ↓
+PostgreSQL / PostGIS (Database)
+         ↑
+Mobile Patrol Application (Flutter)
+```
+
+# 5 Project Structure
+
+- `backend/`: Django REST API, AI prediction scripts, PostGIS integrations, and automated seeders.
+- `frontend/`: Vite + React web application for Command and Station roles.
+- `mobile/`: Flutter native application containing `lib/config.dart` with API configurations and screens for patrol officers.
+- `docker/` & `docker-compose.yml`: Containerization configuration ensuring PostGIS and Django run synchronously.
+
+# 6 Installation & Setup
+
+**Prerequisites & Dependencies:**
+- Git
+- Docker Desktop (Required for PostGIS and Django)
+- Node.js (v18+) & npm (Required for React frontend)
+- Flutter SDK (v3.12+) (Required for Mobile application)
+- WSL2 (Highly Recommended for Windows)
+
+**Environment Variables:**
+Refer to the `backend/.env.example` file. Set up `DATABASE_URL`, `SECRET_KEY`, and `DEBUG` appropriately. Do not use production passwords locally.
+
+**Backend & Database:**
 ```bash
 git clone <repository-url>
 cd cybersphere
-```
-
-### Start Backend + Database
-The backend and database run entirely in Docker.
-```bash
+# Starts PostGIS and Django, applies migrations automatically
 docker compose up --build
+# Open a new terminal to seed the deterministic demo data
+docker compose exec backend python manage.py seed_demo_data
 ```
-*This will automatically pull the PostGIS image, build the Django backend, run migrations (`python manage.py migrate`), and start the backend server.*
 
-### Start Frontend
-The frontend runs via Vite and npm. Open a **new terminal window**:
+**Frontend (Web):**
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-### Verify Services
-To verify the Docker containers are healthy:
-```bash
-docker compose ps
-```
-You should see two containers running:
-- `db`: The PostGIS database
-- `backend`: The Django API
-
-## Local URLs & Services
-- **Frontend / CyberSphere App**: http://localhost:5173
-- **Backend API Base**: http://localhost:8000/api/
-- **Django Admin**: http://localhost:8000/admin/
-- **Swagger Documentation**: http://localhost:8000/swagger/
-- **Database Port**: `5432`
-
-## Database & Demo Data Setup
-CyberSphere requires synthetic demonstration data for the dashboards and GIS maps to function properly.
-
-Once the backend is running, open a **new terminal** and run the following command to seed the database with synthetic deterministic Ahmedabad demonstration data (Incidents, FIRs, Patrols, Evidence, etc.):
-
-```bash
-docker compose exec backend python manage.py seed_demo_data
-```
-
-To generate a much larger temporal dataset (up to 12 months of historical data for analytics and AI forecasting), run the temporal seeder:
-```bash
-docker compose exec backend python manage.py seed_temporal_data --months 12
-```
-*Note: You can pass `--clear` to the temporal seeder to wipe existing synthetic data before reseeding: `docker compose exec backend python manage.py seed_temporal_data --months 12 --clear`*
-
-## Demo Credentials (LOCAL/DEMO ONLY)
-The `seed_demo_data` command creates several safe, local-only demo accounts to explore different Role-Based Access Control (RBAC) views. **These are synthetic accounts for demo purposes only. Do not use in production.**
-
-**Admin / City Command**
-- Username: `admin`
-- Password: `admin123`
-- Purpose: Full city-wide command overview, analytics, and intelligence forecasting.
-
-**Station Commanders**
-- Username: `station_navrangpura`
-- Password: `station123`
-- Station: Navrangpura Police Station
-- Purpose: Station-specific dashboard, managing local FIRs, dispatching local units.
-
-- Username: `station_satellite`
-- Password: `station123`
-- Station: Satellite Police Station
-
-**Patrol Officers**
-- Username: `patrol_mehta`
-- Password: `patrol123`
-- Purpose: Mobile/Patrol view, viewing assignments, acknowledging dispatch.
-
-- Username: `patrol_joshi`
-- Password: `patrol123`
-
-## Application Roles
-- **City Command (Admin)**: Can view all stations, city-wide heatmap, response time trends, and run AI prediction models.
-- **Station Commander (Station)**: Restricted to their specific jurisdiction. Can dispatch local patrol units, file FIRs, and monitor station-level workload.
-- **Patrol Officer (Patrol)**: Receives active assignments and transmits GPS locations. Cannot dispatch other units.
-
-## Main Demo Flow
-1. Start Docker (`docker compose up`) and Frontend (`npm run dev`).
-2. Run the seed script: `docker compose exec backend python manage.py seed_demo_data`
-3. Open `http://localhost:5173` and log in as `admin` (City Command).
-4. View the **City Command** dashboard to see the progressive loading map, active incidents, and response time charts.
-5. Log out and log back in as `station_navrangpura` to view the restricted **Station Dashboard**.
-6. View **Operational History** to test the time, status, and severity filters.
-7. Explore **AI Intelligence** and **GIS** capabilities for crime forecasting.
-
-## Current MVP Features
-- **City Command Dashboard**: Real-time city-wide monitoring with progressive loading and AbortController request management for high performance.
-- **Station Dashboard**: Localized dispatch and workload tracking.
-- **Incident & FIR Management**: Centralized reporting with geospatial tagging.
-- **Dispatch / Patrol Operations**: Assign officers to incidents with simulated GPS tracking.
-- **Operational History**: Advanced combinable time/severity/status filtering for historical analysis.
-- **AI Intelligence**: Temporal crime forecasting and risk density mapping.
-
-## Mobile Application
-CyberSphere includes a Flutter-based mobile application designed for Patrol Officers in the field. It connects directly to the central Django backend and provides a focused operational workflow for receiving assignments, transmitting GPS telemetry, navigating to incidents, and uploading evidence.
-
-### Mobile Features
-- **Patrol Authentication**: Login securely using JWT-based API endpoints.
-- **Active Assignment Visibility**: Automatically fetches the current highest-priority active dispatch assignment.
-- **Location & GPS Tracking**: Continuous GPS telemetry pinging to the backend, enabling the City Command map to track units in real-time.
-- **Operational Status Workflow**: Update assignment status sequentially (`ASSIGNED` → `ACKNOWLEDGED` → `EN ROUTE` → `ARRIVED` → `COMPLETED`).
-- **Navigation Integration**: Seamless handoff to Google Maps or native OS navigation for incident routing.
-- **Evidence Capture**: Camera and gallery integration for capturing and uploading incident evidence directly to the backend.
-
-### Mobile Project Structure
-```text
-mobile/
-├── android/             # Android native configuration
-├── ios/                 # iOS native configuration
-├── lib/
-│   ├── config.dart      # API connection configuration
-│   ├── main.dart        # Flutter entry point
-│   └── screens/         # UI screens (home_screen, login_screen)
-└── pubspec.yaml         # Flutter dependencies
-```
-
-### Mobile Setup
-To run the mobile app, you need the Flutter SDK and a device/emulator.
-
-1. Install Flutter (v3.12+ recommended).
-2. Open a new terminal and navigate to the `mobile` directory:
+**Mobile Application:**
 ```bash
 cd mobile
 flutter pub get
-```
-3. Run the app on an active Android emulator or connected device:
-```bash
 flutter run
 ```
+*Note: Ensure your emulator or physical device can reach the host API at `http://localhost:8000` (or `10.0.2.2` for Android) via `lib/config.dart`.*
 
-### Backend Connection
-The mobile application uses `lib/config.dart` to determine the backend API URL. 
-- **Android Emulator**: Uses `http://10.0.2.2:8000` to reach the host machine's backend.
-- **iOS Simulator / Web**: Uses `http://localhost:8000`.
-Ensure the backend is running via Docker before starting the mobile app.
+# 7 Usage
 
-### Mobile Demo Flow
-1. Start the CyberSphere backend and database (`docker compose up`).
-2. Seed the demo data if not already done.
-3. Start the mobile app (`flutter run`).
-4. Login using the Patrol Officer demo account (Username: `patrol_mehta`, Password: `patrol123`).
-5. Ensure location permissions are granted when prompted.
-6. Acknowledge your assigned incident and cycle through the status updates (`EN_ROUTE`, `ARRIVED`).
-7. Watch the City Command web dashboard automatically update your GPS location and assignment status in real-time.
+1. Start all Docker and frontend services.
+2. Open `http://localhost:5173` in your browser.
+3. Log in as **Admin** (Username: `admin`, Password: `admin123`) to view the City Command heatmap and overarching analytics.
+4. Log out and log in as a **Station Commander** (Username: `station_navrangpura`, Password: `station123`) to see localized operations and dispatch units.
+5. Open the Flutter **Mobile Application** and log in as a **Patrol Officer** (Username: `patrol_mehta`, Password: `patrol123`).
+6. Acknowledge an assignment on the mobile app, and watch the status and live GPS location update on the web Command dashboard in real time.
 
-## Architecture Overview
-The CyberSphere ecosystem operates on a unified backend:
+# 8 Screenshots / Demo
 
-```text
-City Command Web (Vite/React)
-        ↓
-Station Dashboard Web (Vite/React)
-        ↓
-CyberSphere Backend API (Django/DRF)
-        ↓
-PostgreSQL / PostGIS (Database)
-        ↑
-Mobile Patrol Application (Flutter)
-```
-Both the Web and Mobile applications communicate with the identical REST APIs to ensure complete real-time synchronization between the field and the command center.
+- **Web App:** http://localhost:5173
+- **Backend API Base:** http://localhost:8000/api/
+- **Swagger Documentation:** http://localhost:8000/swagger/
 
-## MVP Scope
-### Web Application
-Designed for **Commanders and Dispatchers**. Provides city-wide overviews, localized station workloads, advanced geospatial filtering, historical analysis, AI predictions, and assignment dispatching.
+*(Add screenshots of the Web Dashboard and Mobile App here)*
 
-### Mobile Application
-Designed strictly for **Patrol Officers in the field**. Provides a streamlined, singular view of their current assignment, location tracking, and status updating. It does not include dispatching, AI forecasting, or historical analysis capabilities.
+# 9 API Documentation
 
-## Environment Variables
-A `.env.example` file is provided in the `backend/` directory. If you run via Docker, `docker-compose.yml` injects the necessary environment variables automatically.
+The API documentation is automatically generated via Swagger and can be viewed at `http://localhost:8000/swagger/`. 
 
-**backend/.env.example**:
-```env
-DATABASE_URL=postgis://postgres:postgrespassword@localhost:5432/cybersphere
-SECRET_KEY=your-secret-key-here
-DEBUG=True
-```
-*Note: `DATABASE_URL` uses `@db:5432` inside Docker, but `@localhost:5432` if running the backend locally outside of Docker.*
+**Example Endpoint: Fetch Incidents**
+- **Endpoint:** `/api/crimes/incidents/`
+- **Method:** `GET`
+- **Required Parameters:** None (Optional query params available for pagination)
+- **Authentication:** Bearer JWT required.
+- **Expected Response:** 200 OK with a paginated JSON object containing incident details and geospatial coordinates.
 
-## Troubleshooting (Windows)
+# 10 Engineering Decisions
 
-### Docker is not running
-If the backend fails to start, verify Docker Desktop is running:
+- **PostGIS vs. Standard RDBMS:** Selected PostGIS to enable complex spatial querying directly in the database rather than resolving coordinates in memory on the backend.
+- **Dockerized Backend:** Chosen to eliminate local OS complexities of installing GDAL/GEOS libraries necessary for GeoDjango, guaranteeing immediate environment reproduction.
+- **Unified API:** Built a single Django REST Framework API layer to serve both the React web application and the Flutter mobile app, maintaining a single source of truth for statuses and coordinates.
+- **Mobile Polling/Location Sync:** Kept the MVP simple with API polling from the mobile application rather than introducing a message broker like Redis/WebSockets, reducing architectural complexity.
+
+# 11 Testing
+
+The backend features end-to-end integration tests using Python test scripts. Tested components include:
+- API access control and station-isolation (ensuring a station cannot view other jurisdictions).
+- Incident paginated listing and role-based data visibility.
+- Data anomaly detection (e.g., impossible dates, misassigned patrols).
+
+**To run tests:**
 ```bash
-docker info
+docker compose exec -T backend python manage.py test
+# Or run specific testing scripts:
+docker compose exec backend python test_apis_script.py
 ```
 
-### Port already in use (5432 or 8000)
-If you get a "bind: address already in use" error:
-- Port 5432: You likely have a local PostgreSQL instance running. Stop it using Windows Services (`services.msc`).
-- Port 8000: Another web server or Django project is running.
+# 12 Limitations & Future Improvements
 
-### Backend is unavailable
-If `http://localhost:8000` is down, inspect backend logs:
-```bash
-docker compose logs -f backend
-```
-
-### Frontend is unavailable
-If `http://localhost:5173` is down, ensure `npm run dev` is running in your `frontend` terminal. 
-
-### Database problems
-To check if the database is healthy:
-```bash
-docker compose ps
-```
-
-### Fresh database / reset
-If your database gets corrupted or you want a completely fresh state:
-**WARNING: This deletes all local demo data.**
-```bash
-docker compose down -v
-docker compose up --build
-```
-Then re-run the seed command.
-
-### Mobile: Connection Refused / Network Offline
-If the mobile app displays "NETWORK OFFLINE" or fails to connect:
-- Ensure your backend is running.
-- If using a physical Android device, the emulator loopback `10.0.2.2` will not work. You must change `apiBaseUrl` in `lib/config.dart` to your computer's local IP address (e.g., `192.168.1.X`) and ensure both devices are on the same Wi-Fi network.
-
-## Development Commands
-
-| Task | Command |
-| :--- | :--- |
-| Start Everything (Backend) | `docker compose up --build` |
-| Stop Backend | `docker compose down` |
-| Start Frontend | `cd frontend && npm run dev` |
-| Build Frontend | `cd frontend && npm run build` |
-| View Backend Logs | `docker compose logs -f backend` |
-| Django Shell | `docker compose exec backend python manage.py shell` |
-| Django Migrations | `docker compose exec backend python manage.py makemigrations` |
-| Seed Basic Data | `docker compose exec backend python manage.py seed_demo_data` |
-| Seed Temporal Data | `docker compose exec backend python manage.py seed_temporal_data --months 12` |
-
-## Team Workflow
-When contributing to CyberSphere:
-1. `git pull origin main`
-2. Create a feature branch: `git checkout -b feature/your-feature-name`
-3. Make changes and test locally.
-4. `git add .`
-5. `git commit -m "Description of changes"`
-6. `git push origin feature/your-feature-name`
+- **Limitations:** Currently relies on deterministic, synthetic demo data rather than live integrations. The mobile application currently polls the API instead of using WebSockets for bidirectional communication.
+- **Future Improvements:** Implement real-time WebSockets/Redis for live map updates and dispatching without polling. Add push notification capability to the mobile application. Improve production deployment configurations including reverse proxy and load balancing.
