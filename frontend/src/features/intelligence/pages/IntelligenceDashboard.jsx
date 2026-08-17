@@ -3,15 +3,7 @@ import api from '../../../services/api';
 import TemporalPanel from '../components/TemporalPanel';
 import CyberMap from '../../../components/map/CyberMap';
 
-
 const AHMEDABAD_CENTER = [23.0225, 72.5714];
-
-function getRiskColor(score) {
-  if (score >= 75) return '#ef4444';
-  if (score >= 50) return '#f59e0b';
-  if (score >= 25) return '#3b82f6';
-  return '#10b981';
-}
 
 function getRiskLabel(score) {
   if (score >= 75) return 'Critical';
@@ -88,127 +80,138 @@ export default function IntelligenceDashboard() {
     return label === filterRisk;
   });
 
-  if (loading) return <div className="loading-spinner">Loading intelligence data...</div>;
+  if (loading) return <div className="loading-spinner" style={{ padding: '24px' }}>LOADING INTELLIGENCE DATA...</div>;
 
   return (
-    <div>
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <h1 className="page-header__title">Crime Intelligence & Analytics</h1>
-          <p className="page-header__subtitle">AI-powered risk analysis and geographic intelligence for Ahmedabad</p>
-        </div>
-        <button className="btn btn--primary" onClick={runPrediction} disabled={predicting}>
-          {predicting ? '⏳ Running AI...' : '🤖 Run AI Prediction'}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '8px', backgroundColor: 'var(--color-bg)', height: '100%', overflowY: 'auto' }}>
+      
+      {/* Header Bar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--color-surface)', padding: '6px 12px', border: '1px solid var(--color-border)', fontSize: '11px', fontFamily: 'var(--font-family-mono)', borderRadius: 'var(--radius-sm)' }}>
+        <span style={{ fontWeight: 'bold' }}>CRIME INTELLIGENCE & AI ANALYTICS CONSOLE</span>
+        <button className="btn btn--primary btn--sm" onClick={runPrediction} disabled={predicting}>
+          {predicting ? '⏳ ANALYZING AI PREDICTIONS...' : '🤖 RUN AI PREDICTION'}
         </button>
       </div>
 
-      {error && <div className="alert alert--error">{error}</div>}
-      {predictionMsg && <div className="alert alert--info">{predictionMsg}</div>}
+      {error && <div className="alert alert--error" style={{ padding: '6px 12px', fontSize: '11px', fontFamily: 'var(--font-family-mono)', margin: 0 }}>{error}</div>}
+      {predictionMsg && <div className="alert alert--info" style={{ padding: '6px 12px', fontSize: '11px', fontFamily: 'var(--font-family-mono)', margin: 0 }}>{predictionMsg}</div>}
 
-      {/* Risk Score Stats */}
-      <div className="stats-grid" style={{ marginBottom: 'var(--space-xl)', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--space-md)' }}>
-        <div style={{ backgroundColor: 'var(--color-bg-dark)', border: '1px solid var(--color-border)', padding: 'var(--space-md)', textAlign: 'center' }}>
-          <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>Risk Zones Identified</div>
-          <div style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--color-primary)' }}>{riskScores.length}</div>
+      {/* Risk Score Stats KPI Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+        <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', textAlign: 'center', fontFamily: 'var(--font-family-mono)' }}>
+          <div style={{ fontSize: '9px', color: 'var(--color-text-secondary)' }}>RISK ZONES IDENTIFIED</div>
+          <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--color-primary-light)', marginTop: '2px' }}>{riskScores.length}</div>
         </div>
-        <div style={{ backgroundColor: 'var(--color-bg-dark)', border: '1px solid var(--color-danger)', borderLeft: '4px solid var(--color-danger)', padding: 'var(--space-md)', textAlign: 'center' }}>
-          <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--color-danger)', marginBottom: '4px' }}>Critical Zones (75+)</div>
-          <div style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--color-danger)' }}>{riskScores.filter(z => z.score >= 75).length}</div>
+        <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderLeft: '3px solid var(--color-danger)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', textAlign: 'center', fontFamily: 'var(--font-family-mono)' }}>
+          <div style={{ fontSize: '9px', color: 'var(--color-danger)', fontWeight: 'bold' }}>CRITICAL ZONES (75+)</div>
+          <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--color-danger)', marginTop: '2px' }}>{riskScores.filter(z => z.score >= 75).length}</div>
         </div>
-        <div style={{ backgroundColor: 'var(--color-bg-dark)', border: '1px solid var(--color-warning)', padding: 'var(--space-md)', textAlign: 'center' }}>
-          <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>High-Risk Zones</div>
-          <div style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--color-warning)' }}>{riskScores.filter(z => z.score >= 50 && z.score < 75).length}</div>
+        <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderLeft: '3px solid var(--color-warning)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', textAlign: 'center', fontFamily: 'var(--font-family-mono)' }}>
+          <div style={{ fontSize: '9px', color: 'var(--color-warning)', fontWeight: 'bold' }}>HIGH-RISK ZONES</div>
+          <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--color-warning)', marginTop: '2px' }}>{riskScores.filter(z => z.score >= 50 && z.score < 75).length}</div>
         </div>
-        <div style={{ backgroundColor: 'var(--color-bg-dark)', border: '1px solid var(--color-border)', padding: 'var(--space-md)', textAlign: 'center' }}>
-          <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>Crime Trends Tracked</div>
-          <div style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--color-success)' }}>{trends.length}</div>
+        <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', textAlign: 'center', fontFamily: 'var(--font-family-mono)' }}>
+          <div style={{ fontSize: '9px', color: 'var(--color-text-secondary)' }}>CRIME TRENDS TRACKED</div>
+          <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--color-success)', marginTop: '2px' }}>{trends.length}</div>
         </div>
       </div>
 
-      {/* Map + Sidebar */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 'var(--space-xl)', alignItems: 'start' }}>
-        <div>
-          {/* Filter bar */}
-          <div style={{ display: 'flex', gap: 'var(--space-md)', marginBottom: 'var(--space-md)', alignItems: 'center' }}>
-            <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 500, color: 'var(--color-text-secondary)' }}>Filter:</span>
+      {/* Map + Sidebar Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '8px', alignItems: 'start' }}>
+        
+        {/* Map Column */}
+        <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          {/* Risk Filter Bar */}
+          <div style={{ padding: '6px 12px', backgroundColor: '#0d1320', borderBottom: '1px solid var(--color-border)', display: 'flex', gap: '8px', alignItems: 'center', fontFamily: 'var(--font-family-mono)', fontSize: '10px' }}>
+            <span style={{ color: 'var(--color-text-secondary)', fontWeight: 'bold' }}>SEVERITY FILTER:</span>
             {['ALL', 'Critical', 'High', 'Medium', 'Low'].map((level) => (
               <button key={level}
-                className={`btn btn--sm ${filterRisk === level ? 'btn--primary' : 'btn--secondary'}`}
-                onClick={() => setFilterRisk(level)}>
-                {level}
+                onClick={() => setFilterRisk(level)}
+                style={{
+                  background: filterRisk === level ? 'var(--color-primary)' : 'transparent',
+                  color: filterRisk === level ? 'white' : 'var(--color-text-secondary)',
+                  border: '1px solid var(--color-border)',
+                  padding: '2px 8px',
+                  fontSize: '9px',
+                  fontFamily: 'var(--font-family-mono)',
+                  cursor: 'pointer',
+                  borderRadius: '2px'
+                }}>
+                {level.toUpperCase()}
               </button>
             ))}
           </div>
 
-          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-            <div className="map-container" style={{ height: '500px', position: 'relative' }}>
-              <CyberMap
-                center={AHMEDABAD_CENTER}
-                zoom={12}
-                riskScores={filteredZones}
-                showRiskZones={true}
-                autoFit={false}
-              />
-            </div>
-            <div className="map-legend" style={{ borderTop: '1px solid var(--color-border)' }}>
-              <div className="map-legend__item"><div className="map-legend__dot" style={{ background: '#10b981' }} /> LOW</div>
-              <div className="map-legend__item"><div className="map-legend__dot" style={{ background: '#3b82f6' }} /> MED</div>
-              <div className="map-legend__item"><div className="map-legend__dot" style={{ background: '#f59e0b' }} /> HIGH</div>
-              <div className="map-legend__item"><div className="map-legend__dot" style={{ background: '#ef4444' }} /> CRITICAL</div>
-            </div>
+          <div style={{ height: '440px', position: 'relative', backgroundColor: '#0b101a' }}>
+            <CyberMap
+              center={AHMEDABAD_CENTER}
+              zoom={12}
+              riskScores={filteredZones}
+              showRiskZones={true}
+              autoFit={false}
+            />
+          </div>
+
+          <div style={{ padding: '6px 12px', backgroundColor: '#0d1320', borderTop: '1px solid var(--color-border)', display: 'flex', gap: '16px', fontSize: '9px', fontFamily: 'var(--font-family-mono)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-success)' }} /> LOW (0-25)</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-info)' }} /> MED (25-50)</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-warning)' }} /> HIGH (50-75)</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-danger)' }} /> CRITICAL (75+)</div>
           </div>
         </div>
 
-        {/* Sidebar: Zone details + Trends */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-          <div className="card" style={{ padding: 0 }}>
-            <div className="card__header" style={{ padding: 'var(--space-sm) var(--space-md)', backgroundColor: 'var(--color-bg-dark)', borderBottom: '1px solid var(--color-border)', margin: 0 }}>
-              <div className="card__title" style={{ fontSize: '11px', margin: 0 }}>Risk Zones Analysis</div>
+        {/* Sidebar Column: Risk details + Trends */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          
+          {/* Risk Zone Analysis Card */}
+          <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+            <div style={{ padding: '6px 12px', backgroundColor: '#0d1320', borderBottom: '1px solid var(--color-border)', fontFamily: 'var(--font-family-mono)', fontSize: '10px', fontWeight: 'bold', letterSpacing: '0.5px' }}>
+              RISK ZONES ANALYSIS
             </div>
             {filteredZones.length === 0 ? (
-              <div style={{ padding: 'var(--space-md)', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>No zones match the filter.</div>
+              <div style={{ padding: '12px', fontSize: '10px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-family-mono)' }}>No zones match filter.</div>
             ) : (
-              <ul style={{ listStyle: 'none', margin: 0, padding: 0, maxHeight: '250px', overflowY: 'auto' }}>
+              <div style={{ maxHeight: '210px', overflowY: 'auto' }}>
                 {filteredZones.map((zone, idx) => (
-                  <li key={idx} style={{
+                  <div key={idx} style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    padding: 'var(--space-sm) var(--space-md)',
+                    padding: '6px 12px',
                     borderBottom: '1px solid var(--color-border)',
-                    fontFamily: 'var(--font-family-mono)', fontSize: '11px'
+                    fontFamily: 'var(--font-family-mono)', fontSize: '10px',
+                    backgroundColor: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)'
                   }}>
-                    <span>{zone.zone_name.toUpperCase()}</span>
-                    <span style={{ 
-                      color: zone.score >= 75 ? 'var(--color-danger)' : zone.score >= 50 ? 'var(--color-warning)' : zone.score >= 25 ? 'var(--color-info)' : 'var(--color-success)',
-                      fontWeight: 'bold'
-                    }}>
+                    <span style={{ color: 'var(--color-text)' }}>{zone.zone_name.toUpperCase()}</span>
+                    <span className={`badge ${zone.score >= 75 ? 'badge--critical' : zone.score >= 50 ? 'badge--high' : zone.score >= 25 ? 'badge--medium' : 'badge--low'}`}>
                       {zone.score?.toFixed(1)}
                     </span>
-                  </li>
+                  </div>
                 ))}
-              </ul>
+              </div>
             )}
           </div>
 
-          <div className="card" style={{ padding: 0 }}>
-            <div className="card__header" style={{ padding: 'var(--space-sm) var(--space-md)', backgroundColor: 'var(--color-bg-dark)', borderBottom: '1px solid var(--color-border)', margin: 0 }}>
-              <div className="card__title" style={{ fontSize: '11px', margin: 0 }}>Crime Trends Vector</div>
+          {/* Crime Trends Vector Card */}
+          <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+            <div style={{ padding: '6px 12px', backgroundColor: '#0d1320', borderBottom: '1px solid var(--color-border)', fontFamily: 'var(--font-family-mono)', fontSize: '10px', fontWeight: 'bold', letterSpacing: '0.5px' }}>
+              CRIME TRENDS VECTOR
             </div>
             {trends.length === 0 ? (
-              <div style={{ padding: 'var(--space-md)', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>No trend data available.</div>
+              <div style={{ padding: '12px', fontSize: '10px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-family-mono)' }}>No trend data available.</div>
             ) : (
-              <ul style={{ listStyle: 'none', margin: 0, padding: 0, maxHeight: '200px', overflowY: 'auto' }}>
+              <div style={{ maxHeight: '180px', overflowY: 'auto' }}>
                 {trends.map((trend, idx) => (
-                  <li key={idx} style={{
+                  <div key={idx} style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    padding: 'var(--space-sm) var(--space-md)',
+                    padding: '6px 12px',
                     borderBottom: '1px solid var(--color-border)',
-                    fontFamily: 'var(--font-family-mono)', fontSize: '11px'
+                    fontFamily: 'var(--font-family-mono)', fontSize: '10px',
+                    backgroundColor: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)'
                   }}>
                     <span style={{ color: 'var(--color-text)' }}>{trend.crime_type.toUpperCase()}</span>
-                    <span style={{ color: 'var(--color-info)' }}>[{trend.frequency}x]</span>
-                  </li>
+                    <span style={{ color: 'var(--color-primary-light)', fontWeight: 'bold' }}>[{trend.frequency}x]</span>
+                  </div>
                 ))}
-              </ul>
+              </div>
             )}
           </div>
         </div>
@@ -218,3 +221,4 @@ export default function IntelligenceDashboard() {
     </div>
   );
 }
+

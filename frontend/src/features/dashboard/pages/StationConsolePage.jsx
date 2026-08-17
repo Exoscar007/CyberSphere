@@ -112,7 +112,7 @@ export default function StationConsolePage() {
       {error && <div className="alert alert--error" style={{ padding: '4px', margin: 0 }}>{error}</div>}
 
       {/* TOP CONTROL BAR */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--color-surface)', padding: '6px 12px', border: '1px solid var(--color-border)', fontSize: '11px', fontFamily: 'var(--font-family-mono)' }}>
+      <div className="station-header-bar">
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <span style={{ color: 'var(--color-success)', fontWeight: 'bold' }}>STATION: {stationName}</span>
           <span style={{ color: 'var(--color-text-secondary)' }}>JURISDICTION: LOCAL ZONE</span>
@@ -124,10 +124,10 @@ export default function StationConsolePage() {
       </div>
 
       {/* FILTER BAR & WORKLOAD */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '4px', alignItems: 'flex-start' }}>
+      <div className="command-filter-bar">
         
         {/* FILTERS */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', padding: '6px 12px' }}>
+        <div className="command-filters-panel">
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <span style={{ fontSize: '11px', fontWeight: 'bold', letterSpacing: '1px', marginRight: '16px' }}>COMMAND FILTERS</span>
             
@@ -150,7 +150,8 @@ export default function StationConsolePage() {
                     padding: '4px 8px',
                     fontSize: '10px',
                     fontFamily: 'var(--font-family-mono)',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    borderRadius: '4px'
                   }}
                 >
                   {tf.label}
@@ -162,7 +163,8 @@ export default function StationConsolePage() {
               <select 
                 value={severityFilter} 
                 onChange={e => setSeverityFilter(e.target.value)}
-                style={{ backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', padding: '4px 8px', fontSize: '10px', fontFamily: 'var(--font-family-mono)' }}
+                className="form-input"
+                style={{ backgroundColor: '#0e1422', color: 'var(--color-text)', border: '1px solid var(--color-border)', padding: '4px 8px', fontSize: '10px', fontFamily: 'var(--font-family-mono)', width: 'auto' }}
               >
                 <option value="">ALL SEVERITIES</option>
                 <option value="CRITICAL">CRITICAL</option>
@@ -174,7 +176,8 @@ export default function StationConsolePage() {
               <select 
                 value={statusFilter} 
                 onChange={e => setStatusFilter(e.target.value)}
-                style={{ backgroundColor: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', padding: '4px 8px', fontSize: '10px', fontFamily: 'var(--font-family-mono)' }}
+                className="form-input"
+                style={{ backgroundColor: '#0e1422', color: 'var(--color-text)', border: '1px solid var(--color-border)', padding: '4px 8px', fontSize: '10px', fontFamily: 'var(--font-family-mono)', width: 'auto' }}
               >
                 <option value="">ALL STATUSES</option>
                 <option value="OPEN">OPEN (INCIDENT)</option>
@@ -193,14 +196,16 @@ export default function StationConsolePage() {
                 type="date" 
                 value={customStart} 
                 onChange={e => setCustomStart(e.target.value)}
-                style={{ backgroundColor: 'var(--color-bg-dark)', color: 'var(--color-text)', border: '1px solid var(--color-border)', padding: '2px 4px', fontSize: '10px', fontFamily: 'var(--font-family-mono)' }}
+                className="form-input"
+                style={{ backgroundColor: '#0e1422', color: 'var(--color-text)', border: '1px solid var(--color-border)', padding: '2px 6px', fontSize: '10px', fontFamily: 'var(--font-family-mono)', width: 'auto' }}
               />
               <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>TO</span>
               <input 
                 type="date" 
                 value={customEnd} 
                 onChange={e => setCustomEnd(e.target.value)}
-                style={{ backgroundColor: 'var(--color-bg-dark)', color: 'var(--color-text)', border: '1px solid var(--color-border)', padding: '2px 4px', fontSize: '10px', fontFamily: 'var(--font-family-mono)' }}
+                className="form-input"
+                style={{ backgroundColor: '#0e1422', color: 'var(--color-text)', border: '1px solid var(--color-border)', padding: '2px 6px', fontSize: '10px', fontFamily: 'var(--font-family-mono)', width: 'auto' }}
               />
             </div>
           )}
@@ -208,7 +213,7 @@ export default function StationConsolePage() {
 
         {/* WORKLOAD SUMMARY */}
         {workload && (
-          <div style={{ display: 'flex', gap: '4px', flexWrap: 'nowrap' }}>
+          <div className="kpi-container-bar">
             {[
               { label: 'NEW / RECENT', value: workload.open_incidents, color: 'var(--color-danger)' },
               { label: 'OPEN INCIDENTS', value: workload.open_incidents, color: 'var(--color-warning)' },
@@ -216,9 +221,9 @@ export default function StationConsolePage() {
               { label: 'ACTIVE PATROLS', value: workload.active_assignments, color: 'var(--color-info)' },
               { label: 'COMPLETED TODAY', value: workload.completed_assignments, color: 'var(--color-success)' }
             ].map((kpi, idx) => (
-              <div key={idx} style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', padding: '6px 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minWidth: '100px' }}>
-                <span style={{ fontSize: '9px', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-family-mono)', whiteSpace: 'nowrap' }}>{kpi.label}</span>
-                <span style={{ fontSize: '14px', fontWeight: 'bold', color: kpi.color || 'var(--color-text)', fontFamily: 'var(--font-family-mono)' }}>{kpi.value}</span>
+              <div key={idx} className="kpi-stat-box">
+                <span className="kpi-stat-box__label">{kpi.label}</span>
+                <span className="kpi-stat-box__value" style={{ color: kpi.color || 'var(--color-text)' }}>{kpi.value}</span>
               </div>
             ))}
           </div>
@@ -226,11 +231,11 @@ export default function StationConsolePage() {
       </div>
 
       {/* MAIN WORKSPACE */}
-      <div style={{ display: 'flex', flex: 1, gap: '8px', minHeight: 0 }}>
+      <div className="station-workspace-split">
         
         {/* LEFT/CENTER: MAP (60%) */}
-        <div style={{ flex: '0 0 60%', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
-          <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--color-bg-dark)' }}>
+        <div className="station-map-panel">
+          <div className="station-map-header">
             <span style={{ fontSize: '11px', fontWeight: 'bold', letterSpacing: '1px' }}>JURISDICTION OPERATIONAL MAP</span>
             <div style={{ display: 'flex', gap: '12px', fontSize: '10px', fontFamily: 'var(--font-family-mono)' }}>
               <span style={{ color: 'var(--color-text-secondary)' }}>LEGEND:</span>
@@ -255,38 +260,41 @@ export default function StationConsolePage() {
         </div>
 
         {/* RIGHT: OPERATIONAL QUEUE (40%) */}
-        <div style={{ flex: '1', display: 'flex', flexDirection: 'column', gap: '8px', minHeight: 0 }}>
+        <div className="station-side-queue">
           
           {/* DISPATCH QUEUE */}
-          <div style={{ flex: '0 0 50%', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', minHeight: 0 }}>
-            <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-bg-dark)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="dispatch-queue-card">
+            <div className="dispatch-queue-header">
               <span style={{ fontSize: '11px', fontWeight: 'bold', letterSpacing: '1px' }}>DISPATCH QUEUE (INCOMING)</span>
-              <span style={{ fontFamily: 'var(--font-family-mono)', fontSize: '11px', color: 'var(--color-text-secondary)' }}>{String(pendingIncidents.length).padStart(2, '0')} PENDING</span>
+              <span style={{ fontFamily: 'var(--font-family-mono)', fontSize: '11px', color: 'var(--color-primary-light)', fontWeight: 'bold' }}>{String(pendingIncidents.length).padStart(2, '0')} PENDING</span>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '0' }}>
               {pendingIncidents.length === 0 ? (
                 <div style={{ padding: '16px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '11px', fontFamily: 'var(--font-family-mono)' }}>QUEUE EMPTY</div>
               ) : (
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px', fontFamily: 'var(--font-family-mono)' }}>
-                  <thead style={{ backgroundColor: 'var(--color-bg-dark)', color: 'var(--color-text-secondary)', borderBottom: '1px solid var(--color-border)' }}>
+                  <thead style={{ backgroundColor: '#0d1320', color: 'var(--color-text-secondary)', borderBottom: '1px solid var(--color-border)' }}>
                     <tr>
-                      <th style={{ padding: '4px 8px', textAlign: 'left' }}>PRIORITY</th>
-                      <th style={{ padding: '4px 8px', textAlign: 'left' }}>INCIDENT</th>
-                      <th style={{ padding: '4px 8px', textAlign: 'left' }}>TIME</th>
-                      <th style={{ padding: '4px 8px', textAlign: 'right' }}>ACTION</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'left' }}>PRIORITY</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'left' }}>INCIDENT</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'left' }}>TIME</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'right' }}>ACTION</th>
                     </tr>
                   </thead>
                   <tbody>
                     {pendingIncidents.map((incident, idx) => {
                       const timeStr = incident.date_occurred ? new Date(incident.date_occurred).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'UNKNOWN';
-                      const color = getSeverityColor(incident.severity);
                       return (
-                        <tr key={idx} style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
-                          <td style={{ padding: '6px 8px', color: color, fontWeight: 'bold' }}>{incident.severity}</td>
-                          <td style={{ padding: '6px 8px', color: 'var(--color-text)' }}>{incident.title.substring(0, 20).toUpperCase()}</td>
+                        <tr key={idx} style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)' }}>
+                          <td style={{ padding: '6px 8px' }}>
+                            <span className={`badge ${incident.severity === 'CRITICAL' ? 'badge--critical' : 'badge--high'}`}>
+                              {incident.severity}
+                            </span>
+                          </td>
+                          <td style={{ padding: '6px 8px', color: 'var(--color-text)', fontWeight: '600' }}>{incident.title.substring(0, 22).toUpperCase()}</td>
                           <td style={{ padding: '6px 8px', color: 'var(--color-text-secondary)' }}>{timeStr}</td>
                           <td style={{ padding: '6px 8px', textAlign: 'right' }}>
-                            <button onClick={() => navigate('/station/firs')} style={{ background: 'var(--color-primary)', border: 'none', color: '#fff', padding: '2px 6px', fontSize: '9px', cursor: 'pointer', fontFamily: 'var(--font-family-mono)' }}>CREATE FIR</button>
+                            <button onClick={() => navigate('/station/firs')} className="btn btn--primary btn--sm">CREATE FIR</button>
                           </td>
                         </tr>
                       );
@@ -298,20 +306,22 @@ export default function StationConsolePage() {
           </div>
 
           {/* LOWER SPLIT: FIRs and PATROLS */}
-          <div style={{ flex: '1', display: 'flex', gap: '8px', minHeight: 0 }}>
+          <div className="lower-split-cards">
             
             {/* PENDING FIRs */}
-            <div style={{ flex: '1', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', minHeight: 0 }}>
-              <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-bg-dark)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="sub-panel-card">
+              <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--color-border)', backgroundColor: '#0d1320', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '11px', fontWeight: 'bold', letterSpacing: '1px' }}>PENDING FIRs</span>
               </div>
               <div style={{ flex: 1, overflowY: 'auto', padding: '0' }}>
-                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px', fontFamily: 'var(--font-family-mono)' }}>
+                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px', fontFamily: 'var(--font-family-mono)' }}>
                   <tbody>
                     {pendingFirs.map((fir, idx) => (
                       <tr key={idx} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                        <td style={{ padding: '6px 8px', color: 'var(--color-primary-light)' }}>{fir.fir_number}</td>
-                        <td style={{ padding: '6px 8px', color: 'var(--color-warning)' }}>UNASSIGNED</td>
+                        <td style={{ padding: '6px 8px', color: 'var(--color-primary-light)', fontWeight: '600' }}>{fir.fir_number}</td>
+                        <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                          <span className="badge badge--warning">UNASSIGNED</span>
+                        </td>
                       </tr>
                     ))}
                     {pendingFirs.length === 0 && <tr><td style={{ padding: '16px', textAlign: 'center', color: 'var(--color-text-muted)' }}>NO PENDING FIRS</td></tr>}
@@ -321,26 +331,26 @@ export default function StationConsolePage() {
             </div>
 
             {/* PATROL UNITS */}
-            <div style={{ flex: '1', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', minHeight: 0 }}>
-              <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-bg-dark)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="sub-panel-card">
+              <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--color-border)', backgroundColor: '#0d1320', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '11px', fontWeight: 'bold', letterSpacing: '1px' }}>PATROL UNITS</span>
               </div>
               <div style={{ flex: 1, overflowY: 'auto', padding: '0', display: 'flex', flexDirection: 'column' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px', fontFamily: 'var(--font-family-mono)' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px', fontFamily: 'var(--font-family-mono)' }}>
                   <tbody>
                     {patrols.filter(p => ['ASSIGNED', 'ACKNOWLEDGED', 'EN_ROUTE', 'ARRIVED'].includes(p.status)).map((patrol, idx) => (
                       <tr key={idx} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                        <td style={{ padding: '6px 8px', color: 'var(--color-text)' }}>P-{String(patrol.id).padStart(3, '0')}</td>
+                        <td style={{ padding: '6px 8px', color: 'var(--color-text)', fontWeight: '600' }}>P-{String(patrol.id).padStart(3, '0')}</td>
                         <td style={{ padding: '6px 8px', textAlign: 'right' }}>
-                          <span style={{ color: patrol.status === 'ACTIVE' || patrol.status === 'ASSIGNED' || patrol.status === 'EN_ROUTE' ? 'var(--color-success)' : 'var(--color-info)' }}>● {patrol.status}</span>
+                          <span className="badge badge--success">● {patrol.status}</span>
                         </td>
                       </tr>
                     ))}
                     {patrols.filter(p => ['ASSIGNED', 'ACKNOWLEDGED', 'EN_ROUTE', 'ARRIVED'].includes(p.status)).length === 0 && <tr><td colSpan="2" style={{ padding: '16px', textAlign: 'center', color: 'var(--color-text-muted)' }}>NO ACTIVE UNITS</td></tr>}
                   </tbody>
                 </table>
-                <div style={{ marginTop: 'auto', padding: '8px', borderTop: '1px solid var(--color-border)', textAlign: 'center', backgroundColor: 'var(--color-bg-dark)' }}>
-                  <button onClick={() => navigate('/station/history')} style={{ background: 'transparent', border: 'none', color: 'var(--color-primary-light)', fontSize: '10px', cursor: 'pointer', fontFamily: 'var(--font-family-mono)', fontWeight: 'bold', width: '100%' }}>
+                <div style={{ marginTop: 'auto', padding: '6px 8px', borderTop: '1px solid var(--color-border)', textAlign: 'center', backgroundColor: '#0d1320' }}>
+                  <button onClick={() => navigate('/station/history')} className="btn btn--secondary btn--full btn--sm">
                     VIEW PATROL HISTORY &rarr;
                   </button>
                 </div>
@@ -354,3 +364,4 @@ export default function StationConsolePage() {
     </div>
   );
 }
+

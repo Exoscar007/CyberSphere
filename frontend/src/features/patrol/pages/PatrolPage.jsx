@@ -144,78 +144,75 @@ export default function PatrolPage() {
     }
   };
 
-  const getRiskBadge = (level) => {
-    const map = { LOW: 'success', MEDIUM: 'info', HIGH: 'warning', CRITICAL: 'danger' };
-    return map[level] || 'neutral';
+  const getRiskBadgeClass = (level) => {
+    if (level === 'CRITICAL') return 'badge--critical';
+    if (level === 'HIGH') return 'badge--high';
+    if (level === 'MEDIUM') return 'badge--medium';
+    return 'badge--low';
   };
   
-  const getStatusBadge = (status) => {
-    const map = { 
-      ASSIGNED: 'info', 
-      ACKNOWLEDGED: 'info', 
-      EN_ROUTE: 'warning', 
-      ARRIVED: 'warning', 
-      COMPLETED: 'success',
-      CANCELLED: 'danger'
-    };
-    return map[status] || 'neutral';
+  const getStatusBadgeClass = (status) => {
+    if (status === 'COMPLETED') return 'badge--success';
+    if (status === 'EN_ROUTE' || status === 'ARRIVED') return 'badge--warning';
+    if (status === 'ASSIGNED' || status === 'ACKNOWLEDGED') return 'badge--info';
+    if (status === 'CANCELLED') return 'badge--danger';
+    return 'badge--medium';
   };
 
   const selectedIncidentAssignments = assignments.filter(a => String(a.incident_details?.id) === String(selectedIncidentId));
   const selectedIncident = incidents.find(i => String(i.id) === String(selectedIncidentId));
 
   return (
-    <div style={{ paddingBottom: '20px' }}>
-      <div className="page-header">
-        <h1 className="page-header__title">Dispatch Patrol</h1>
-        <p className="page-header__subtitle">Select an incident and dispatch patrol units</p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '8px', backgroundColor: 'var(--color-bg)' }}>
+      {/* Header Bar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--color-surface)', padding: '6px 12px', border: '1px solid var(--color-border)', fontSize: '11px', fontFamily: 'var(--font-family-mono)', borderRadius: 'var(--radius-sm)' }}>
+        <span style={{ fontWeight: 'bold' }}>PATROL DISPATCH & TACTICAL OPERATIONS CONSOLE</span>
+        {error && <span style={{ color: 'var(--color-danger)', fontWeight: 'bold' }}>{error}</span>}
+        {success && <span style={{ color: 'var(--color-success)', fontWeight: 'bold' }}>{success}</span>}
       </div>
 
-      {error && <div className="alert alert--error">{error}</div>}
-      {success && <div className="alert alert--success">{success}</div>}
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-xl)', marginBottom: 'var(--space-xl)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
         
-        {/* Map Selection */}
-        <div className="card" style={{ padding: 0, overflow: 'hidden', height: '400px', display: 'flex', flexDirection: 'column' }}>
-           <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', fontSize: '12px', fontWeight: 'bold' }}>
-             OPERATIONAL MAP - SELECT DESTINATION
-           </div>
-           <div style={{ flex: 1, position: 'relative', backgroundColor: '#0b101a' }}>
-              <CyberMap
-                key={mapCenter.join(',')}
-                center={mapCenter}
-                zoom={13}
-                destination={destination}
-                onLocationSelect={(coords) => setDestination(coords)}
-                recommendations={recommendations}
-                onSelectRecommendation={(patrolId) => {
-                  setFormData((prev) => ({ ...prev, officer: String(patrolId) }));
-                  setRecommendations(null);
-                }}
-                selectedIncident={selectedIncident}
-                autoFit={true}
-              />
-            </div>
-           <div style={{ padding: '8px 16px', backgroundColor: 'var(--color-bg-dark)', borderTop: '1px solid var(--color-border)', fontSize: '11px', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-family-mono)' }}>
-             {destination ? `SELECTED DESTINATION: ${destination.lat.toFixed(5)}, ${destination.lng.toFixed(5)}` : 'CLICK ON MAP TO SELECT PATROL DESTINATION'}
-           </div>
+        {/* Map Selection Card */}
+        <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', height: '420px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--color-border)', backgroundColor: '#0d1320', fontSize: '11px', fontWeight: 'bold', fontFamily: 'var(--font-family-mono)', letterSpacing: '1px' }}>
+            OPERATIONAL MAP - SELECT DESTINATION
+          </div>
+          <div style={{ flex: 1, position: 'relative', backgroundColor: '#0b101a' }}>
+            <CyberMap
+              key={mapCenter.join(',')}
+              center={mapCenter}
+              zoom={13}
+              destination={destination}
+              onLocationSelect={(coords) => setDestination(coords)}
+              recommendations={recommendations}
+              onSelectRecommendation={(patrolId) => {
+                setFormData((prev) => ({ ...prev, officer: String(patrolId) }));
+                setRecommendations(null);
+              }}
+              selectedIncident={selectedIncident}
+              autoFit={true}
+            />
+          </div>
+          <div style={{ padding: '6px 12px', backgroundColor: '#0d1320', borderTop: '1px solid var(--color-border)', fontSize: '10px', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-family-mono)' }}>
+            {destination ? `SELECTED DESTINATION: ${destination.lat.toFixed(5)}, ${destination.lng.toFixed(5)}` : 'CLICK ON MAP TO SELECT PATROL DESTINATION'}
+          </div>
         </div>
 
-        {/* Assign Form */}
-        <div className="card" style={{ height: '400px', overflowY: 'auto' }}>
-          <div className="card__title" style={{ marginBottom: 'var(--space-md)' }}>Dispatch Configuration</div>
+        {/* Assign Form Card */}
+        <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', height: '420px', overflowY: 'auto', padding: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 'bold', letterSpacing: '1px', fontFamily: 'var(--font-family-mono)', borderBottom: '1px solid var(--color-border)', paddingBottom: '6px' }}>DISPATCH CONFIGURATION</div>
           
-          <div className="form-group">
+          <div className="form-group" style={{ marginBottom: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-              <label className="form-label" style={{ margin: 0 }}>Target Incident</label>
+              <label className="form-label" style={{ margin: 0 }}>TARGET INCIDENT</label>
               {selectedIncidentId && (
-                <button type="button" onClick={handleRecommend} disabled={recommendLoading} style={{ background: 'var(--color-primary)', border: 'none', color: '#fff', padding: '4px 8px', fontSize: '10px', cursor: 'pointer', fontFamily: 'var(--font-family-mono)', borderRadius: '2px' }}>
+                <button type="button" onClick={handleRecommend} disabled={recommendLoading} className="btn btn--primary btn--sm" style={{ padding: '2px 8px' }}>
                   {recommendLoading ? 'ANALYZING...' : 'RECOMMEND PATROL'}
                 </button>
               )}
             </div>
-            <select className="form-input" value={selectedIncidentId} onChange={handleIncidentChange}>
+            <select className="form-input" value={selectedIncidentId} onChange={handleIncidentChange} style={{ fontFamily: 'var(--font-family-mono)', height: '32px' }}>
               <option value="">-- Select Incident --</option>
               {incidents.map(inc => (
                 <option key={inc.id} value={inc.id}>
@@ -226,22 +223,22 @@ export default function PatrolPage() {
           </div>
 
           {recommendations && (
-            <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: 'rgba(0, 200, 255, 0.05)', border: '1px solid rgba(0, 200, 255, 0.2)', borderRadius: '4px' }}>
-              <div style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--color-info)', marginBottom: '8px', letterSpacing: '1px' }}>RECOMMENDED PATROLS</div>
+            <div style={{ padding: '10px', backgroundColor: '#0d1320', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)' }}>
+              <div style={{ fontSize: '10px', fontWeight: 'bold', color: 'var(--color-primary-light)', marginBottom: '6px', letterSpacing: '0.5px', fontFamily: 'var(--font-family-mono)' }}>AI RECOMMENDED UNITS</div>
               {recommendations.length === 0 ? (
-                <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>No available patrols found.</div>
+                <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-family-mono)' }}>No available patrols found.</div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   {recommendations.map(r => (
-                    <div key={r.patrol_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--color-surface)', padding: '8px', borderRadius: '4px', border: '1px solid var(--color-border)' }}>
+                    <div key={r.patrol_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--color-surface)', padding: '6px 8px', borderRadius: '4px', border: '1px solid var(--color-border)', fontFamily: 'var(--font-family-mono)' }}>
                       <div>
-                        <div style={{ fontSize: '13px', fontWeight: 'bold' }}>{r.officer_name.toUpperCase()} {r.badge_number && `[${r.badge_number}]`}</div>
-                        <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{r.station} | {(r.distance_meters / 1000).toFixed(2)} km away</div>
+                        <div style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--color-text)' }}>{r.officer_name.toUpperCase()} {r.badge_number && `[${r.badge_number}]`}</div>
+                        <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>{r.station} | {(r.distance_meters / 1000).toFixed(2)} km away</div>
                       </div>
                       <button type="button" onClick={() => {
                         setFormData(prev => ({ ...prev, officer: String(r.patrol_id) }));
-                        setRecommendations(null); // hide after selection
-                      }} style={{ background: 'var(--color-success)', border: 'none', color: '#fff', padding: '4px 12px', fontSize: '11px', cursor: 'pointer', borderRadius: '2px', fontWeight: 'bold' }}>
+                        setRecommendations(null);
+                      }} className="btn btn--secondary btn--sm">
                         SELECT
                       </button>
                     </div>
@@ -251,11 +248,11 @@ export default function PatrolPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label className="form-label">Patrol Officer / Unit</label>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">PATROL OFFICER / UNIT</label>
               {officers.length > 0 ? (
-                <select name="officer" className="form-input" value={formData.officer} onChange={handleChange} required>
+                <select name="officer" className="form-input" value={formData.officer} onChange={handleChange} required style={{ fontFamily: 'var(--font-family-mono)', height: '32px' }}>
                   <option value="">-- Select Patrol Unit --</option>
                   {officers.map(o => {
                     const label = `${o.badge_number ? `[${o.badge_number}] ` : ''}${o.username.toUpperCase()}`;
@@ -267,21 +264,21 @@ export default function PatrolPage() {
                   })}
                 </select>
               ) : (
-                <div style={{ color: 'var(--color-danger)', fontSize: '12px' }}>
+                <div style={{ color: 'var(--color-danger)', fontSize: '11px', fontFamily: 'var(--font-family-mono)' }}>
                   No available patrol officers found for this station.
                 </div>
               )}
             </div>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Zone Name</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">ZONE NAME</label>
                 <input name="zone_name" value={formData.zone_name} onChange={handleChange}
-                  className="form-input" required placeholder="e.g. Navrangpura" />
+                  className="form-input" required placeholder="e.g. Navrangpura" style={{ fontFamily: 'var(--font-family-mono)', height: '32px' }} />
               </div>
-              <div className="form-group">
-                <label className="form-label">Priority</label>
-                <select name="priority" className="form-input" value={formData.priority} onChange={handleChange}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">PRIORITY</label>
+                <select name="priority" className="form-input" value={formData.priority} onChange={handleChange} style={{ fontFamily: 'var(--font-family-mono)', height: '32px' }}>
                    <option value="LOW">LOW</option>
                    <option value="MEDIUM">MEDIUM</option>
                    <option value="HIGH">HIGH</option>
@@ -290,65 +287,68 @@ export default function PatrolPage() {
               </div>
             </div>
 
-            <div className="form-group">
-               <label className="form-label">Operational Instructions</label>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+               <label className="form-label">OPERATIONAL INSTRUCTIONS</label>
                <textarea name="instructions" value={formData.instructions} onChange={handleChange}
-                 className="form-input" rows="3" required placeholder="Provide clear instructions for the patrol unit..."></textarea>
+                 className="form-input" rows="2" required placeholder="Provide clear instructions for the patrol unit..." style={{ fontFamily: 'var(--font-family-mono)' }}></textarea>
             </div>
 
-            <button type="submit" className="btn btn--primary btn--full" style={{ marginTop: 'var(--space-md)' }} disabled={submitLoading || !selectedIncidentId || !destination}>
+            <button type="submit" className="btn btn--primary btn--full" style={{ marginTop: 'auto', height: '34px' }} disabled={submitLoading || !selectedIncidentId || !destination}>
               {submitLoading ? 'DISPATCHING...' : 'DISPATCH PATROL'}
             </button>
           </form>
         </div>
       </div>
 
-      {/* Incident Information & Assignments */}
+      {/* Incident Information & Assignments Card */}
       {selectedIncident && (
-        <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 'var(--space-xl)' }}>
-           <div style={{ padding: 'var(--space-md) var(--space-lg)', backgroundColor: 'var(--color-bg-dark)', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+           <div style={{ padding: '8px 12px', backgroundColor: '#0d1320', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontFamily: 'var(--font-family-mono)' }}>
              <div>
-               <div style={{ fontSize: '14px', fontWeight: 'bold' }}>{selectedIncident.title.toUpperCase()}</div>
-               <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>INCIDENT #{selectedIncident.id} | STATUS: {selectedIncident.status}</div>
+               <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text)' }}>{selectedIncident.title.toUpperCase()}</div>
+               {/* Real selectedIncident.id displayed */}
+               <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>INCIDENT #{selectedIncident.id} | STATUS: {selectedIncident.status}</div>
              </div>
              <div>
-               <span className={`badge badge--${getRiskBadge(selectedIncident.severity)}`}>{selectedIncident.severity}</span>
-               {selectedIncident.fir && <span className="badge badge--neutral" style={{ marginLeft: '8px' }}>FIR LINKED</span>}
+               <span className={`badge ${getRiskBadgeClass(selectedIncident.severity)}`}>{selectedIncident.severity}</span>
+               {selectedIncident.fir && <span className="badge badge--low" style={{ marginLeft: '8px' }}>FIR LINKED</span>}
              </div>
            </div>
-           <div style={{ padding: 'var(--space-md) var(--space-lg)', fontSize: '13px', color: 'var(--color-text-secondary)', borderBottom: '1px solid var(--color-border)' }}>
+           <div style={{ padding: '8px 12px', fontSize: '11px', color: 'var(--color-text-secondary)', borderBottom: '1px solid var(--color-border)', fontFamily: 'var(--font-family-mono)' }}>
              {selectedIncident.description}
            </div>
            
-           <div style={{ padding: 'var(--space-md) var(--space-lg)', backgroundColor: 'var(--color-surface)' }}>
-             <h4 style={{ margin: '0 0 var(--space-md) 0', fontSize: '12px', fontFamily: 'var(--font-family-mono)' }}>ASSIGNED PATROLS FOR THIS INCIDENT</h4>
+           <div style={{ padding: '8px 12px' }}>
+             <div style={{ margin: '0 0 8px 0', fontSize: '10px', fontWeight: 'bold', fontFamily: 'var(--font-family-mono)', color: 'var(--color-primary-light)', letterSpacing: '0.5px' }}>ASSIGNED PATROLS FOR THIS INCIDENT</div>
              {selectedIncidentAssignments.length === 0 ? (
-               <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>No patrols currently assigned.</div>
+               <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-family-mono)' }}>No patrols currently assigned.</div>
              ) : (
-               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', fontFamily: 'var(--font-family-mono)' }}>
-                 <thead>
-                   <tr style={{ color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
-                     <th style={{ padding: '8px 4px' }}>ASSIGNMENT ID</th>
-                     <th style={{ padding: '8px 4px' }}>OFFICER</th>
-                     <th style={{ padding: '8px 4px' }}>DESTINATION (LAT, LNG)</th>
-                     <th style={{ padding: '8px 4px' }}>STATUS</th>
-                     <th style={{ padding: '8px 4px' }}>PRIORITY</th>
-                     <th style={{ padding: '8px 4px' }}>INSTRUCTIONS</th>
+               <table className="data-table" style={{ fontFamily: 'var(--font-family-mono)' }}>
+                 <thead style={{ backgroundColor: '#0d1320', color: 'var(--color-text-secondary)' }}>
+                   <tr>
+                     <th style={{ padding: '6px 8px' }}>ASSIGNMENT ID</th>
+                     <th style={{ padding: '6px 8px' }}>OFFICER</th>
+                     <th style={{ padding: '6px 8px' }}>DESTINATION (LAT, LNG)</th>
+                     <th style={{ padding: '6px 8px' }}>STATUS</th>
+                     <th style={{ padding: '6px 8px' }}>PRIORITY</th>
+                     <th style={{ padding: '6px 8px' }}>INSTRUCTIONS</th>
                    </tr>
                  </thead>
                  <tbody>
-                   {selectedIncidentAssignments.map(a => (
-                     <tr key={a.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                       <td style={{ padding: '10px 4px' }}>#{a.id}</td>
-                       <td style={{ padding: '10px 4px' }}>{a.officer_username}</td>
-                       <td style={{ padding: '10px 4px' }}>
+                   {selectedIncidentAssignments.map((a, idx) => (
+                     <tr key={a.id} style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)' }}>
+                       <td style={{ padding: '6px 8px', color: 'var(--color-primary-light)', fontWeight: '700' }}>#{a.id}</td>
+                       <td style={{ padding: '6px 8px' }}>{a.officer_username}</td>
+                       <td style={{ padding: '6px 8px' }}>
                           {a.destination?.coordinates ? `${a.destination.coordinates[1].toFixed(4)}, ${a.destination.coordinates[0].toFixed(4)}` : 'UNKNOWN'}
                        </td>
-                       <td style={{ padding: '10px 4px' }}>
-                         <span className={`badge badge--${getStatusBadge(a.status)}`}>{a.status}</span>
+                       <td style={{ padding: '6px 8px' }}>
+                         <span className={`badge ${getStatusBadgeClass(a.status)}`}>● {a.status}</span>
                        </td>
-                       <td style={{ padding: '10px 4px', color: `var(--color-${getRiskBadge(a.priority)})`, fontWeight: 'bold' }}>{a.priority}</td>
-                       <td style={{ padding: '10px 4px', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.instructions}</td>
+                       <td style={{ padding: '6px 8px' }}>
+                         <span className={`badge ${getRiskBadgeClass(a.priority)}`}>{a.priority}</span>
+                       </td>
+                       <td style={{ padding: '6px 8px', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.instructions}</td>
                      </tr>
                    ))}
                  </tbody>
@@ -358,34 +358,46 @@ export default function PatrolPage() {
         </div>
       )}
 
-      {/* Legacy/All Assignments Table (Optional, for station global view) */}
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: 'var(--space-lg)', borderBottom: '1px solid var(--color-border)' }}>
-          <div className="card__title">All Station Assignments ({assignments.length})</div>
+      {/* Global Station Assignments Table Card */}
+      <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+        <div style={{ padding: '6px 12px', backgroundColor: '#0d1320', borderBottom: '1px solid var(--color-border)' }}>
+          <span style={{ fontSize: '11px', fontWeight: 'bold', fontFamily: 'var(--font-family-mono)', letterSpacing: '1px' }}>ALL STATION ASSIGNMENTS ({assignments.length})</span>
         </div>
         {loading ? (
-          <div className="loading-spinner">Loading assignments...</div>
+          <div className="loading-spinner">LOADING ASSIGNMENTS...</div>
         ) : assignments.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state__icon">🚔</div>
-            <div className="empty-state__title">No patrol assignments</div>
+            <div className="empty-state__title">NO PATROL ASSIGNMENTS</div>
           </div>
         ) : (
-          <div className="table-container" style={{ maxHeight: '400px', overflowY: 'auto' }}>
-            <table className="data-table">
-              <thead style={{ position: 'sticky', top: 0, zIndex: 1, backgroundColor: 'var(--color-surface)' }}>
-                <tr><th>ID</th><th>Officer</th><th>Incident</th><th>Zone</th><th>Priority</th><th>Status</th><th>Started</th></tr>
+          <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
+            <table className="data-table" style={{ fontFamily: 'var(--font-family-mono)' }}>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#0d1320' }}>
+                <tr>
+                  <th style={{ padding: '8px 12px' }}>ID</th>
+                  <th style={{ padding: '8px 12px' }}>OFFICER</th>
+                  <th style={{ padding: '8px 12px' }}>INCIDENT</th>
+                  <th style={{ padding: '8px 12px' }}>ZONE</th>
+                  <th style={{ padding: '8px 12px' }}>PRIORITY</th>
+                  <th style={{ padding: '8px 12px' }}>STATUS</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'right' }}>STARTED</th>
+                </tr>
               </thead>
               <tbody>
-                {assignments.map((a) => (
-                  <tr key={a.id}>
-                    <td>#{a.id}</td>
-                    <td>{a.officer_username || `Officer #${a.officer}`}</td>
-                    <td>{a.incident_details?.title ? `${a.incident_details.title.substring(0, 20)}...` : `Inc #${a.incident}`}</td>
-                    <td>{a.zone_name}</td>
-                    <td><span className={`badge badge--${getRiskBadge(a.priority)}`}>{a.priority}</span></td>
-                    <td><span className={`badge badge--${getStatusBadge(a.status)}`}>{a.status}</span></td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{a.start_time ? new Date(a.start_time).toLocaleString() : '—'}</td>
+                {assignments.map((a, idx) => (
+                  <tr key={a.id} style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)' }}>
+                    <td style={{ padding: '8px 12px', color: 'var(--color-primary-light)', fontWeight: '700' }}>#{a.id}</td>
+                    <td style={{ padding: '8px 12px' }}>{a.officer_username || `Officer #${a.officer}`}</td>
+                    <td style={{ padding: '8px 12px' }}>{a.incident_details?.title ? `${a.incident_details.title.substring(0, 22).toUpperCase()}` : `Inc #${a.incident}`}</td>
+                    <td style={{ padding: '8px 12px' }}>{a.zone_name}</td>
+                    <td style={{ padding: '8px 12px' }}>
+                      <span className={`badge ${getRiskBadgeClass(a.priority)}`}>{a.priority}</span>
+                    </td>
+                    <td style={{ padding: '8px 12px' }}>
+                      <span className={`badge ${getStatusBadgeClass(a.status)}`}>● {a.status}</span>
+                    </td>
+                    <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>{a.start_time ? new Date(a.start_time).toLocaleString() : '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -396,3 +408,4 @@ export default function PatrolPage() {
     </div>
   );
 }
+

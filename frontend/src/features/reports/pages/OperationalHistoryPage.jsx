@@ -30,27 +30,24 @@ export default function OperationalHistoryPage() {
     navigate(`${incidentId}`);
   };
 
-  // Use loading state gracefully in render instead of early return, to keep UI stable
-  // if (loading) {
-  //   return <div style={{ padding: '24px', color: 'white' }}>Loading operational history...</div>;
-  // }
+  const getStatusBadgeClass = (status) => {
+    if (status === 'RESOLVED') return 'badge--success';
+    if (status === 'OPEN') return 'badge--info';
+    return 'badge--danger';
+  };
 
   return (
-    <div style={{ padding: '24px', color: 'white', height: '100%', overflowY: 'auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
-        <div>
-          <h1 style={{ marginBottom: '8px', fontSize: '24px', fontWeight: 'bold' }}>Operational History</h1>
-          <p style={{ color: 'var(--color-text-muted)', margin: 0 }}>
-            Complete audit trail of all dispatched and completed incidents, assignments, and evidence.
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', backgroundColor: 'var(--color-surface)', padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
-          <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginRight: '8px' }}>FILTER:</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '8px', height: '100%', backgroundColor: 'var(--color-bg)' }}>
+      {/* Header Bar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--color-surface)', padding: '6px 12px', border: '1px solid var(--color-border)', fontSize: '11px', fontFamily: 'var(--font-family-mono)', borderRadius: 'var(--radius-sm)' }}>
+        <span style={{ fontWeight: 'bold' }}>OPERATIONAL HISTORY & AUDIT LOGS</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 'bold' }}>PERIOD:</span>
           <select 
             value={year} 
             onChange={(e) => setYear(Number(e.target.value))}
-            style={{ backgroundColor: 'var(--color-bg-dark)', color: 'white', border: '1px solid var(--color-border)', padding: '6px 12px', borderRadius: '4px', fontSize: '14px', fontFamily: 'var(--font-family-mono)' }}
+            className="form-input"
+            style={{ backgroundColor: '#0e1422', color: 'var(--color-text)', border: '1px solid var(--color-border)', padding: '2px 8px', fontSize: '10px', fontFamily: 'var(--font-family-mono)', width: 'auto' }}
           >
             {[2024, 2025, 2026, 2027].map(y => (
               <option key={y} value={y}>{y}</option>
@@ -59,7 +56,8 @@ export default function OperationalHistoryPage() {
           <select 
             value={month} 
             onChange={(e) => setMonth(Number(e.target.value))}
-            style={{ backgroundColor: 'var(--color-bg-dark)', color: 'white', border: '1px solid var(--color-border)', padding: '6px 12px', borderRadius: '4px', fontSize: '14px', fontFamily: 'var(--font-family-mono)' }}
+            className="form-input"
+            style={{ backgroundColor: '#0e1422', color: 'var(--color-text)', border: '1px solid var(--color-border)', padding: '2px 8px', fontSize: '10px', fontFamily: 'var(--font-family-mono)', width: 'auto' }}
           >
             <option value={1}>JAN</option>
             <option value={2}>FEB</option>
@@ -77,46 +75,59 @@ export default function OperationalHistoryPage() {
         </div>
       </div>
 
-      {loading ? (
-        <div style={{ padding: '24px', backgroundColor: 'var(--color-surface)', borderRadius: '8px', textAlign: 'center' }}>
-          Loading operational history...
-        </div>
-      ) : history.length === 0 ? (
-        <div style={{ padding: '24px', backgroundColor: 'var(--color-surface)', borderRadius: '8px', textAlign: 'center' }}>
-          No operational history found.
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gap: '16px' }}>
-          {history.map((incident) => (
-            <div key={incident.id} onClick={() => navigateToAudit(incident.id)} style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '16px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>Incident #{incident.id}: {incident.title}</h3>
-                  <span style={{ 
-                    padding: '2px 8px', 
-                    borderRadius: '4px', 
-                    fontSize: '10px', 
-                    fontWeight: 'bold',
-                    backgroundColor: incident.status === 'RESOLVED' ? 'rgba(16, 185, 129, 0.2)' : (incident.status === 'OPEN' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(239, 68, 68, 0.2)'),
-                    color: incident.status === 'RESOLVED' ? '#10B981' : (incident.status === 'OPEN' ? '#3B82F6' : '#EF4444')
-                  }}>
-                    {incident.status}
-                  </span>
+      {/* Main List Container */}
+      <div style={{ flex: 1, backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', overflowY: 'auto', padding: '12px' }}>
+        {loading ? (
+          <div className="loading-spinner">LOADING OPERATIONAL HISTORY...</div>
+        ) : history.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-state__icon">📜</div>
+            <div className="empty-state__title">NO OPERATIONAL HISTORY FOUND</div>
+            <div className="empty-state__text">No incident audit logs recorded for the selected period.</div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {history.map((incident) => (
+              <div 
+                key={incident.id} 
+                onClick={() => navigateToAudit(incident.id)} 
+                style={{ 
+                  backgroundColor: '#0d1320', 
+                  border: '1px solid var(--color-border)', 
+                  borderRadius: 'var(--radius-sm)', 
+                  padding: '10px 14px', 
+                  cursor: 'pointer', 
+                  display: 'flex', 
+                  justify: 'space-between', 
+                  alignItems: 'center',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 'bold', fontFamily: 'var(--font-family-mono)', color: 'var(--color-primary-light)' }}>
+                      INCIDENT #{incident.id}: {incident.title.toUpperCase()}
+                    </span>
+                    <span className={`badge ${getStatusBadgeClass(incident.status)}`}>
+                      {incident.status}
+                    </span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '11px', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-family-mono)' }}>{incident.description}</p>
+                  <div style={{ marginTop: '6px', fontSize: '10px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-family-mono)', display: 'flex', gap: '16px' }}>
+                    <span>DEPLOYMENTS: {incident.patrol_assignments?.length || 0}</span>
+                    <span>EVIDENCE ITEMS: {incident.evidence?.length || 0}</span>
+                    <span>DATE: {new Date(incident.date_occurred).toLocaleString()}</span>
+                  </div>
                 </div>
-                <p style={{ margin: 0, fontSize: '14px', color: 'var(--color-text-secondary)' }}>{incident.description}</p>
-                <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--color-text-muted)', display: 'flex', gap: '16px' }}>
-                  <span>Deployments: {incident.patrol_assignments?.length || 0}</span>
-                  <span>Evidence Items: {incident.evidence?.length || 0}</span>
-                  <span>Date: {new Date(incident.date_occurred).toLocaleString()}</span>
+                <div style={{ color: 'var(--color-primary-light)', fontSize: '11px', fontWeight: 'bold', fontFamily: 'var(--font-family-mono)' }}>
+                  VIEW AUDIT &rarr;
                 </div>
               </div>
-              <div style={{ color: 'var(--color-primary)' }}>
-                View Audit &rarr;
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
+

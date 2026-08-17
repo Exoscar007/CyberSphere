@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../../services/api';
 
-function getSeverityColor(severity) {
-  if (severity === 'CRITICAL') return 'var(--color-danger)';
-  if (severity === 'HIGH') return 'var(--color-warning)';
-  if (severity === 'MEDIUM') return 'var(--color-info)';
-  return 'var(--color-success)';
+function getSeverityBadgeClass(severity) {
+  if (severity === 'CRITICAL') return 'badge--critical';
+  if (severity === 'HIGH') return 'badge--high';
+  if (severity === 'MEDIUM') return 'badge--medium';
+  return 'badge--low';
 }
 
 export default function IncidentPage() {
@@ -80,86 +80,102 @@ export default function IncidentPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '8px', padding: '8px', backgroundColor: 'var(--color-bg)' }}>
       
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--color-surface)', padding: '6px 12px', border: '1px solid var(--color-border)', fontSize: '11px', fontFamily: 'var(--font-family-mono)' }}>
-        <span style={{ fontWeight: 'bold' }}>STATION INCIDENT & COMPLAINT QUEUE</span>
-        {error && <span style={{ color: 'var(--color-danger)' }}>{error}</span>}
+      {/* Header Bar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--color-surface)', padding: '6px 12px', border: '1px solid var(--color-border)', fontSize: '11px', fontFamily: 'var(--font-family-mono)', borderRadius: 'var(--radius-sm)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ fontWeight: 'bold' }}>STATION INCIDENT & COMPLAINT QUEUE</span>
+          <span style={{ color: 'var(--color-text-secondary)', fontSize: '10px' }}>[{stationName}]</span>
+        </div>
+        {error && <span style={{ color: 'var(--color-danger)', fontWeight: 'bold' }}>{error}</span>}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <input 
-            placeholder="SEARCH INCIDENTS..." 
-            value={search} 
-            onChange={(e) => setSearch(e.target.value)} 
-            style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)', padding: '2px 6px', fontSize: '10px', fontFamily: 'var(--font-family-mono)', width: '250px' }}
-          />
-          <button onClick={() => setShowNewModal(true)} style={{ background: 'var(--color-primary)', border: 'none', color: '#fff', padding: '2px 8px', fontSize: '10px', cursor: 'pointer', fontFamily: 'var(--font-family-mono)' }}>NEW INCIDENT</button>
+          <div className="search-bar" style={{ width: '220px' }}>
+            <span className="search-bar__icon">🔍</span>
+            <input 
+              placeholder="Search Incidents..." 
+              value={search} 
+              onChange={(e) => setSearch(e.target.value)} 
+            />
+          </div>
+          <button onClick={() => setShowNewModal(true)} className="btn btn--primary btn--sm">
+            + NEW INCIDENT
+          </button>
         </div>
       </div>
 
-      {/* Main Table */}
-      <div style={{ flex: 1, backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      {/* Main Table Container */}
+      <div style={{ flex: 1, backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
         <div style={{ flex: 1, overflowY: 'auto', padding: '0' }}>
           {loading ? (
-            <div style={{ padding: '16px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '11px', fontFamily: 'var(--font-family-mono)' }}>LOADING QUEUE...</div>
+            <div className="loading-spinner">LOADING INCIDENT QUEUE...</div>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', fontFamily: 'var(--font-family-mono)' }}>
-              <thead style={{ backgroundColor: 'var(--color-bg-dark)', color: 'var(--color-text-secondary)', borderBottom: '1px solid var(--color-border)', position: 'sticky', top: 0 }}>
+            <table className="data-table" style={{ fontFamily: 'var(--font-family-mono)' }}>
+              <thead style={{ backgroundColor: '#0d1320', color: 'var(--color-text-secondary)', borderBottom: '1px solid var(--color-border)', position: 'sticky', top: 0, zIndex: 10 }}>
                 <tr>
-                  <th style={{ padding: '8px 12px', textAlign: 'left' }}>INCIDENT ID</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'left' }}>PRIORITY</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'left' }}>TYPE / TITLE</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'left' }}>LOCATION</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'left' }}>TIME</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'left' }}>STATUS</th>
+                  <th style={{ padding: '8px 12px' }}>INCIDENT ID</th>
+                  <th style={{ padding: '8px 12px' }}>PRIORITY</th>
+                  <th style={{ padding: '8px 12px' }}>TYPE / TITLE</th>
+                  <th style={{ padding: '8px 12px' }}>LOCATION</th>
+                  <th style={{ padding: '8px 12px' }}>TIME</th>
+                  <th style={{ padding: '8px 12px' }}>STATUS</th>
                   <th style={{ padding: '8px 12px', textAlign: 'right' }}>ACTION</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((incident, idx) => {
                   const timeStr = incident.date_occurred ? new Date(incident.date_occurred).toLocaleString([], {month: 'short', day: '2-digit', hour: '2-digit', minute:'2-digit'}) : 'UNKNOWN';
-                  const color = getSeverityColor(incident.severity);
-                  // Generating a pseudo-ID for display density purposes since we don't have one in model
+                  // Presentation-only ID label for table display (real incident.id remains untouched below)
                   const displayId = `INC-${String(incident.id).padStart(4, '0')}`;
                   
                   // Calculate Assignment Status
                   let assignmentStatus = 'UNASSIGNED';
-                  let statusColor = 'var(--color-warning)';
+                  let badgeClass = 'badge--warning';
                   
                   if (incident.patrol_assignments && incident.patrol_assignments.length > 0) {
                     const statuses = incident.patrol_assignments.map(a => a.status);
                     
                     if (statuses.includes('ARRIVED')) {
                       assignmentStatus = 'ARRIVED';
-                      statusColor = 'var(--color-danger)';
+                      badgeClass = 'badge--danger';
                     } else if (statuses.includes('EN_ROUTE')) {
                       assignmentStatus = 'EN_ROUTE';
-                      statusColor = 'var(--color-primary-light)';
+                      badgeClass = 'badge--low';
                     } else if (statuses.includes('ACKNOWLEDGED')) {
                       assignmentStatus = 'ACKNOWLEDGED';
-                      statusColor = 'var(--color-info)';
+                      badgeClass = 'badge--info';
                     } else if (statuses.includes('ASSIGNED')) {
                       assignmentStatus = 'ASSIGNED';
-                      statusColor = 'var(--color-success)';
+                      badgeClass = 'badge--success';
                     } else if (statuses.every(s => s === 'COMPLETED')) {
                       assignmentStatus = 'COMPLETED';
-                      statusColor = 'var(--color-text-muted)';
+                      badgeClass = 'badge--medium';
                     } else if (statuses.every(s => s === 'CANCELLED')) {
                       assignmentStatus = 'CANCELLED';
-                      statusColor = 'var(--color-text-muted)';
+                      badgeClass = 'badge--medium';
                     }
                   }
 
                   return (
-                    <tr key={incident.id} style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
-                      <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary)', fontWeight: 'bold' }}>{displayId}</td>
-                      <td style={{ padding: '10px 12px', color: color, fontWeight: 'bold' }}>{incident.severity}</td>
-                      <td style={{ padding: '10px 12px', color: 'var(--color-text)', maxWidth: '250px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{incident.title.toUpperCase()}</td>
-                      <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary)' }}>{stationName}</td>
-                      <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary)' }}>{timeStr}</td>
-                      <td style={{ padding: '10px 12px', color: statusColor, fontWeight: 'bold' }}>{assignmentStatus}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                        <button onClick={() => navigate('/station/history/' + incident.id)} style={{ background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text)', padding: '2px 8px', fontSize: '9px', cursor: 'pointer', fontFamily: 'var(--font-family-mono)' }}>VIEW</button>
-                        <button onClick={() => navigate('/station/firs')} style={{ background: 'transparent', border: '1px solid var(--color-primary-light)', color: 'var(--color-primary-light)', padding: '2px 8px', fontSize: '9px', cursor: 'pointer', fontFamily: 'var(--font-family-mono)' }}>CREATE FIR</button>
-                        <button onClick={() => navigate('/station/dispatch', { state: { incident } })} style={{ background: 'var(--color-info)', border: 'none', color: '#fff', padding: '2px 8px', fontSize: '9px', cursor: 'pointer', fontFamily: 'var(--font-family-mono)' }}>DISPATCH</button>
+                    <tr key={incident.id} style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)' }}>
+                      <td style={{ padding: '8px 12px', color: 'var(--color-primary-light)', fontWeight: '700' }}>{displayId}</td>
+                      <td style={{ padding: '8px 12px' }}>
+                        <span className={`badge ${getSeverityBadgeClass(incident.severity)}`}>
+                          {incident.severity}
+                        </span>
+                      </td>
+                      <td style={{ padding: '8px 12px', color: 'var(--color-text)', maxWidth: '250px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: '600' }}>{incident.title.toUpperCase()}</td>
+                      <td style={{ padding: '8px 12px', color: 'var(--color-text-secondary)' }}>{stationName}</td>
+                      <td style={{ padding: '8px 12px', color: 'var(--color-text-secondary)' }}>{timeStr}</td>
+                      <td style={{ padding: '8px 12px' }}>
+                        <span className={`badge ${badgeClass}`}>● {assignmentStatus}</span>
+                      </td>
+                      <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', gap: '6px', justifyContent: 'flex-end' }}>
+                          {/* Real incident.id used for VIEW navigation */}
+                          <button onClick={() => navigate('/station/history/' + incident.id)} className="btn btn--ghost btn--sm">VIEW</button>
+                          <button onClick={() => navigate('/station/firs')} className="btn btn--secondary btn--sm">CREATE FIR</button>
+                          {/* Real incident object (with real incident.id) passed in route state */}
+                          <button onClick={() => navigate('/station/dispatch', { state: { incident } })} className="btn btn--primary btn--sm">DISPATCH</button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -173,35 +189,44 @@ export default function IncidentPage() {
       
       {/* NEW INCIDENT MODAL */}
       {showNewModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '16px', width: '400px', display: 'flex', flexDirection: 'column' }}>
-            <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', color: 'white' }}>CREATE NEW INCIDENT</h3>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(5, 8, 15, 0.85)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ backgroundColor: '#0D121F', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '16px', width: '420px', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', paddingBottom: '8px', borderBottom: '1px solid var(--color-border)' }}>
+              <h3 style={{ margin: 0, fontSize: '13px', color: 'white', fontFamily: 'var(--font-family-mono)', letterSpacing: '1px', fontWeight: 'bold' }}>CREATE NEW INCIDENT</h3>
+              <button onClick={() => setShowNewModal(false)} style={{ background: 'transparent', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '14px' }}>✕</button>
+            </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>TITLE / TYPE</label>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">TITLE / TYPE</label>
                 <input 
                   value={newIncident.title} 
                   onChange={e => setNewIncident({...newIncident, title: e.target.value})} 
-                  style={{ width: '100%', padding: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'white' }} 
+                  placeholder="Enter incident title..."
+                  className="form-input"
+                  style={{ fontFamily: 'var(--font-family-mono)', height: '32px' }} 
                 />
               </div>
               
-              <div>
-                <label style={{ display: 'block', fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>DESCRIPTION</label>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">DESCRIPTION</label>
                 <textarea 
                   value={newIncident.description} 
                   onChange={e => setNewIncident({...newIncident, description: e.target.value})} 
-                  style={{ width: '100%', padding: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'white', minHeight: '60px' }} 
+                  placeholder="Enter detailed description..."
+                  className="form-input"
+                  rows="3"
+                  style={{ fontFamily: 'var(--font-family-mono)' }} 
                 />
               </div>
               
-              <div>
-                <label style={{ display: 'block', fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>SEVERITY</label>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">SEVERITY</label>
                 <select 
                   value={newIncident.severity} 
                   onChange={e => setNewIncident({...newIncident, severity: e.target.value})} 
-                  style={{ width: '100%', padding: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'white' }}>
+                  className="form-input"
+                  style={{ fontFamily: 'var(--font-family-mono)', height: '32px' }}>
                   <option value="CRITICAL">CRITICAL</option>
                   <option value="HIGH">HIGH</option>
                   <option value="MEDIUM">MEDIUM</option>
@@ -210,20 +235,20 @@ export default function IncidentPage() {
               </div>
               
               <div style={{ display: 'flex', gap: '8px' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>LATITUDE</label>
-                  <input type="number" step="0.0001" value={newIncident.lat} onChange={e => setNewIncident({...newIncident, lat: e.target.value})} style={{ width: '100%', padding: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'white' }} />
+                <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                  <label className="form-label">LATITUDE</label>
+                  <input type="number" step="0.0001" value={newIncident.lat} onChange={e => setNewIncident({...newIncident, lat: e.target.value})} className="form-input" style={{ fontFamily: 'var(--font-family-mono)', height: '32px' }} />
                 </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>LONGITUDE</label>
-                  <input type="number" step="0.0001" value={newIncident.lng} onChange={e => setNewIncident({...newIncident, lng: e.target.value})} style={{ width: '100%', padding: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'white' }} />
+                <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                  <label className="form-label">LONGITUDE</label>
+                  <input type="number" step="0.0001" value={newIncident.lng} onChange={e => setNewIncident({...newIncident, lng: e.target.value})} className="form-input" style={{ fontFamily: 'var(--font-family-mono)', height: '32px' }} />
                 </div>
               </div>
             </div>
             
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '24px' }}>
-              <button onClick={() => setShowNewModal(false)} style={{ background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text)', padding: '6px 16px', cursor: 'pointer' }}>CANCEL</button>
-              <button onClick={handleCreateIncident} disabled={creating} style={{ background: 'var(--color-primary)', border: 'none', color: 'white', padding: '6px 16px', cursor: 'pointer', opacity: creating ? 0.5 : 1 }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '20px', paddingTop: '12px', borderTop: '1px solid var(--color-border)' }}>
+              <button onClick={() => setShowNewModal(false)} className="btn btn--secondary btn--sm">CANCEL</button>
+              <button onClick={handleCreateIncident} disabled={creating} className="btn btn--primary btn--sm">
                 {creating ? 'CREATING...' : 'CREATE INCIDENT'}
               </button>
             </div>
@@ -234,3 +259,4 @@ export default function IncidentPage() {
     </div>
   );
 }
+

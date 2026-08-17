@@ -58,82 +58,105 @@ export default function UserManagementPage() {
     u.role?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const getRoleBadge = (role) => {
-    const map = { ADMIN: 'danger', STATION: 'warning', POLICE_OFFICER: 'info', PATROL_OFFICER: 'success' };
-    return map[role] || 'neutral';
+  const getRoleBadgeClass = (role) => {
+    if (role === 'ADMIN') return 'badge--danger';
+    if (role === 'STATION') return 'badge--warning';
+    if (role === 'POLICE_OFFICER') return 'badge--info';
+    if (role === 'PATROL_OFFICER') return 'badge--success';
+    return 'badge--low';
   };
 
   return (
-    <div>
-      <div className="page-header">
-        <h1 className="page-header__title">User Management</h1>
-        <p className="page-header__subtitle">Manage system users and role assignments</p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '8px', backgroundColor: 'var(--color-bg)', height: '100%', overflowY: 'auto' }}>
+      
+      {/* Header Bar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--color-surface)', padding: '6px 12px', border: '1px solid var(--color-border)', fontSize: '11px', fontFamily: 'var(--font-family-mono)', borderRadius: 'var(--radius-sm)' }}>
+        <span style={{ fontWeight: 'bold' }}>USER MANAGEMENT & PERSONNEL ROSTER</span>
       </div>
 
-      {error && <div className="alert alert--error">{error}</div>}
-      {success && <div className="alert alert--success">{success}</div>}
+      {error && <div className="alert alert--error" style={{ padding: '6px 12px', fontSize: '11px', fontFamily: 'var(--font-family-mono)', margin: 0 }}>{error}</div>}
+      {success && <div className="alert alert--success" style={{ padding: '6px 12px', fontSize: '11px', fontFamily: 'var(--font-family-mono)', margin: 0 }}>{success}</div>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: 'var(--space-xl)', alignItems: 'start' }}>
-        <div className="card">
-          <div className="card__title" style={{ marginBottom: 'var(--space-lg)' }}>Create User</div>
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label className="form-label">Username</label>
+      <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: '8px', alignItems: 'start' }}>
+        
+        {/* Create User Form Card */}
+        <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+          <div style={{ padding: '6px 12px', backgroundColor: '#0d1320', borderBottom: '1px solid var(--color-border)', fontFamily: 'var(--font-family-mono)', fontSize: '11px', fontWeight: 'bold', letterSpacing: '1px' }}>
+            CREATE NEW USER
+          </div>
+          <form onSubmit={handleSubmit} style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">USERNAME</label>
               <input name="username" value={formData.username}
                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                className="form-input" required placeholder="Enter username" />
+                className="form-input" required placeholder="Enter username" style={{ fontFamily: 'var(--font-family-mono)', height: '32px' }} />
             </div>
-            <div className="form-group">
-              <label className="form-label">Password</label>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">PASSWORD</label>
               <input name="password" type="password" value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="form-input" required placeholder="Enter password" />
+                className="form-input" required placeholder="Enter password" style={{ fontFamily: 'var(--font-family-mono)', height: '32px' }} />
             </div>
-            <div className="form-group">
-              <label className="form-label">Role</label>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">SYSTEM ROLE</label>
               <select name="role" value={formData.role}
                 onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                className="form-input">
+                className="form-input" style={{ fontFamily: 'var(--font-family-mono)', height: '32px' }}>
                 <option value="ADMIN">Administrator</option>
                 <option value="STATION">Station Console</option>
                 <option value="POLICE_OFFICER">Police Officer</option>
                 <option value="PATROL_OFFICER">Patrol Officer</option>
               </select>
             </div>
-            <button type="submit" className="btn btn--primary btn--full" disabled={submitLoading}>
-              {submitLoading ? 'Creating...' : 'Create User'}
+            <button type="submit" className="btn btn--primary btn--full" style={{ marginTop: '4px', height: '34px' }} disabled={submitLoading}>
+              {submitLoading ? 'CREATING USER...' : 'CREATE USER'}
             </button>
           </form>
         </div>
 
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: 'var(--space-lg)', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div className="card__title">Users ({filtered.length})</div>
-            <div className="search-bar">
-              <span className="search-bar__icon">🔍</span>
-              <input placeholder="Search users..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        {/* User Roster Table Card */}
+        <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+          <div style={{ padding: '6px 12px', backgroundColor: '#0d1320', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontFamily: 'var(--font-family-mono)' }}>
+            <span style={{ fontSize: '11px', fontWeight: 'bold', letterSpacing: '1px' }}>SYSTEM USERS ({filtered.length})</span>
+            <div style={{ position: 'relative', width: '200px' }}>
+              <input 
+                placeholder="Search users..." 
+                value={search} 
+                onChange={(e) => setSearch(e.target.value)} 
+                style={{ width: '100%', backgroundColor: '#05080f', color: 'var(--color-text)', border: '1px solid var(--color-border)', padding: '2px 8px', fontSize: '10px', fontFamily: 'var(--font-family-mono)', borderRadius: 'var(--radius-sm)' }}
+              />
             </div>
           </div>
           {loading ? (
-            <div className="loading-spinner">Loading users...</div>
+            <div className="loading-spinner" style={{ padding: '24px' }}>LOADING USERS...</div>
           ) : filtered.length === 0 ? (
-            <div className="empty-state">
+            <div className="empty-state" style={{ padding: '24px' }}>
               <div className="empty-state__icon">👤</div>
-              <div className="empty-state__title">{search ? 'No matching users' : 'No users found'}</div>
-              <div className="empty-state__text">Create users to populate the system.</div>
+              <div className="empty-state__title">{search ? 'NO MATCHING USERS' : 'NO USERS FOUND'}</div>
             </div>
           ) : (
-            <div className="table-container">
-              <table className="data-table">
-                <thead><tr><th>Username</th><th>Role</th><th>Badge</th><th>Actions</th></tr></thead>
+            <div style={{ maxHeight: '420px', overflowY: 'auto' }}>
+              <table className="data-table" style={{ fontFamily: 'var(--font-family-mono)' }}>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#0d1320' }}>
+                  <tr>
+                    <th style={{ padding: '8px 12px' }}>USERNAME</th>
+                    <th style={{ padding: '8px 12px' }}>ROLE</th>
+                    <th style={{ padding: '8px 12px' }}>BADGE NUMBER</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right' }}>ACTIONS</th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {filtered.map((u) => (
-                    <tr key={u.id}>
-                      <td>{u.username}</td>
-                      <td><span className={`badge badge--${getRoleBadge(u.role)}`}>{u.role}</span></td>
-                      <td>{u.badge_number || '—'}</td>
-                      <td>
-                        <button className="btn btn--danger btn--sm" onClick={() => handleDelete(u.id)}>Delete</button>
+                  {filtered.map((u, idx) => (
+                    <tr key={u.id} style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)' }}>
+                      <td style={{ padding: '8px 12px', color: 'var(--color-text)', fontWeight: 'bold' }}>{u.username}</td>
+                      <td style={{ padding: '8px 12px' }}>
+                        <span className={`badge ${getRoleBadgeClass(u.role)}`}>● {u.role}</span>
+                      </td>
+                      <td style={{ padding: '8px 12px', color: 'var(--color-text-secondary)' }}>{u.badge_number || '—'}</td>
+                      <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                        <button className="btn btn--danger btn--sm" onClick={() => handleDelete(u.id)} style={{ padding: '2px 8px' }}>
+                          DELETE
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -146,3 +169,4 @@ export default function UserManagementPage() {
     </div>
   );
 }
+

@@ -27,67 +27,73 @@ export default function ReportsPage() {
     fetchData();
   }, []);
 
-  if (loading) return <div className="loading-spinner">Loading reports...</div>;
+  if (loading) return <div className="loading-spinner" style={{ padding: '24px' }}>LOADING SYSTEM REPORTS...</div>;
 
   return (
-    <div>
-      <div className="page-header">
-        <h1 className="page-header__title">Reports & System Health</h1>
-        <p className="page-header__subtitle">Monitor system status and view crime summaries</p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '8px', backgroundColor: 'var(--color-bg)', height: '100%', overflowY: 'auto' }}>
+      
+      {/* Header Bar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--color-surface)', padding: '6px 12px', border: '1px solid var(--color-border)', fontSize: '11px', fontFamily: 'var(--font-family-mono)', borderRadius: 'var(--radius-sm)' }}>
+        <span style={{ fontWeight: 'bold' }}>SYSTEM REPORTS & INFRASTRUCTURE HEALTH CONSOLE</span>
       </div>
 
-      {error && <div className="alert alert--error">{error}</div>}
+      {error && <div className="alert alert--error" style={{ padding: '6px 12px', fontSize: '11px', fontFamily: 'var(--font-family-mono)', margin: 0 }}>{error}</div>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-xl)' }}>
-        {/* Health */}
-        <div className="card">
-          <div className="card__title" style={{ marginBottom: 'var(--space-lg)' }}>System Health</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', alignItems: 'start' }}>
+        
+        {/* System Health Card */}
+        <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+          <div style={{ padding: '6px 12px', backgroundColor: '#0d1320', borderBottom: '1px solid var(--color-border)', fontFamily: 'var(--font-family-mono)', fontSize: '11px', fontWeight: 'bold', letterSpacing: '1px' }}>
+            SYSTEM INFRASTRUCTURE HEALTH
+          </div>
           {health ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: 'var(--space-md)', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
-                <span style={{ fontWeight: 500 }}>API Status</span>
-                <span className={`badge badge--${health.status === 'UP' ? 'success' : 'danger'}`}>{health.status}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '12px', fontFamily: 'var(--font-family-mono)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#0d1320', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}>
+                <span style={{ fontSize: '11px', color: 'var(--color-text)' }}>API Gateway Status</span>
+                <span className={`badge ${health.status === 'UP' ? 'badge--success' : 'badge--danger'}`}>● {health.status}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: 'var(--space-md)', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
-                <span style={{ fontWeight: 500 }}>Database</span>
-                <span className={`badge badge--${health.database === 'OK' ? 'success' : 'danger'}`}>{health.database}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#0d1320', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}>
+                <span style={{ fontSize: '11px', color: 'var(--color-text)' }}>PostgreSQL Database</span>
+                <span className={`badge ${health.database === 'OK' ? 'badge--success' : 'badge--danger'}`}>● {health.database}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: 'var(--space-md)', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
-                <span style={{ fontWeight: 500 }}>Timestamp</span>
-                <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#0d1320', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}>
+                <span style={{ fontSize: '11px', color: 'var(--color-text)' }}>Health Check Timestamp</span>
+                <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>
                   {health.timestamp ? new Date(health.timestamp).toLocaleString() : '—'}
                 </span>
               </div>
             </div>
           ) : (
-            <div className="empty-state">
+            <div className="empty-state" style={{ padding: '24px' }}>
               <div className="empty-state__title">Health data unavailable</div>
               <div className="empty-state__text">The backend may be unreachable.</div>
             </div>
           )}
         </div>
 
-        {/* Crime Summary */}
-        <div className="card">
-          <div className="card__title" style={{ marginBottom: 'var(--space-lg)' }}>Crime Summary Report</div>
+        {/* Crime Summary Report Card */}
+        <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+          <div style={{ padding: '6px 12px', backgroundColor: '#0d1320', borderBottom: '1px solid var(--color-border)', fontFamily: 'var(--font-family-mono)', fontSize: '11px', fontWeight: 'bold', letterSpacing: '1px' }}>
+            CRIME SUMMARY REPORT
+          </div>
           {report ? (
-            <div>
-              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginBottom: 'var(--space-md)' }}>
-                Report Type: {report.report_type || 'Crime Summary'} | Generated: {report.generated_at ? new Date(report.generated_at).toLocaleString() : '—'}
+            <div style={{ padding: '12px', fontFamily: 'var(--font-family-mono)' }}>
+              <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', marginBottom: '8px', borderBottom: '1px solid var(--color-border)', paddingBottom: '6px' }}>
+                TYPE: {report.report_type?.toUpperCase() || 'CRIME SUMMARY'} | GENERATED: {report.generated_at ? new Date(report.generated_at).toLocaleString() : '—'}
               </div>
               {report.data && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   {Object.entries(report.data).map(([key, value]) => (
-                    <div key={key} style={{ display: 'flex', justifyContent: 'space-between', padding: 'var(--space-sm) var(--space-md)', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', fontSize: 'var(--font-size-sm)' }}>
-                      <span style={{ fontWeight: 500, textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}</span>
-                      <span style={{ fontWeight: 600 }}>{typeof value === 'object' ? JSON.stringify(value) : value}</span>
+                    <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 12px', background: '#0d1320', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', fontSize: '10px' }}>
+                      <span style={{ color: 'var(--color-text-secondary)' }}>{key.replace(/_/g, ' ').toUpperCase()}</span>
+                      <span style={{ color: 'var(--color-primary-light)', fontWeight: 'bold' }}>{typeof value === 'object' ? JSON.stringify(value) : value}</span>
                     </div>
                   ))}
                 </div>
               )}
             </div>
           ) : (
-            <div className="empty-state">
+            <div className="empty-state" style={{ padding: '24px' }}>
               <div className="empty-state__title">Report data unavailable</div>
               <div className="empty-state__text">Crime summary requires a running backend.</div>
             </div>
@@ -97,3 +103,4 @@ export default function ReportsPage() {
     </div>
   );
 }
+

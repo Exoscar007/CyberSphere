@@ -3,25 +3,30 @@ import { NavLink } from 'react-router-dom';
 
 export default function OfficerWorkspaceSidebar() {
   const activeStyle = {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderLeft: '4px solid var(--color-success)'
+    backgroundColor: 'rgba(0, 122, 255, 0.15)',
+    color: '#3898ff',
+    borderLeft: '3px solid #007aff',
+    fontWeight: '700'
   };
   
   const linkStyle = {
-    display: 'block',
-    padding: '12px 24px',
-    color: '#e2e8f0',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px 16px',
+    color: 'var(--sidebar-text)',
     textDecoration: 'none',
-    borderLeft: '4px solid transparent',
-    transition: 'all 0.2s',
-    fontSize: '14px',
-    fontWeight: '500'
+    borderLeft: '3px solid transparent',
+    transition: 'all 0.12s ease',
+    fontSize: '12px',
+    fontWeight: '500',
+    marginBottom: '1px'
   };
 
   const sectionHeader = {
-    padding: '16px 24px 8px',
-    color: 'var(--color-primary-light)',
-    fontSize: '11px',
+    padding: '16px 16px 6px',
+    color: 'var(--color-text-muted)',
+    fontSize: '10px',
     textTransform: 'uppercase',
     letterSpacing: '1px',
     fontWeight: '700'
@@ -29,23 +34,21 @@ export default function OfficerWorkspaceSidebar() {
 
   return (
     <aside style={{ width: 'var(--sidebar-width)', backgroundColor: 'var(--sidebar-bg)', color: 'white', display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--color-border)' }}>
-      <div style={{ padding: '24px', fontSize: '20px', fontWeight: 'bold', borderBottom: '1px solid var(--color-border-light)' }}>
-        <span style={{color: 'var(--color-success)'}}>Officer</span>Workspace
-      </div>
-      <nav style={{ flex: 1, padding: '16px 0', overflowY: 'auto' }}>
-        <div style={sectionHeader}>Investigator Tasks</div>
+      <nav style={{ flex: 1, padding: '8px 0', overflowY: 'auto' }}>
+        <div style={sectionHeader}>INVESTIGATOR TASKS</div>
         <NavLink to="/officer/workspace" style={({isActive}) => isActive ? {...linkStyle, ...activeStyle} : linkStyle}>
-          My Cases
+          <span>📁</span> My Cases
         </NavLink>
         <NavLink to="/officer/create-fir" style={({isActive}) => isActive ? {...linkStyle, ...activeStyle} : linkStyle}>
-          Create FIR
+          <span>📝</span> Create FIR
         </NavLink>
         
-        <div style={sectionHeader}>Tools</div>
+        <div style={sectionHeader}>TOOLS</div>
         <NavLink to="/officer/evidence" style={({isActive}) => isActive ? {...linkStyle, ...activeStyle} : linkStyle}>
-          Evidence Review
+          <span>🔍</span> Evidence Review
         </NavLink>
       </nav>
     </aside>
   );
 }
+

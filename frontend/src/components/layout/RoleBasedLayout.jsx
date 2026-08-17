@@ -19,12 +19,13 @@ export default function RoleBasedLayout({ role }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', backgroundColor: 'var(--color-bg)' }}>
       <Header />
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
         <SidebarComponent />
-        <main style={{ flex: 1, overflowY: 'hidden', padding: 0 }}>
+        <main style={{ flex: 1, overflowY: 'hidden', padding: 0, backgroundColor: 'var(--color-bg)', display: 'flex', flexDirection: 'column' }}>
           <Outlet />
         </main>
       </div>
     </div>
   );
 }
+
