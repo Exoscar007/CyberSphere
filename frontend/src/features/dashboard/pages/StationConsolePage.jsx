@@ -22,6 +22,9 @@ export default function StationConsolePage() {
 
   const [workload, setWorkload] = useState(null);
   
+  const profile = JSON.parse(localStorage.getItem('user') || '{}');
+  const stationName = (profile.station_name || profile.username?.replace('station_', '') || 'LOCAL JURISDICTION').toUpperCase();
+
   const [timeFilter, setTimeFilter] = useState('1h');
   const [severityFilter, setSeverityFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -136,8 +139,8 @@ export default function StationConsolePage() {
       {/* TOP CONTROL BAR */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--color-surface)', padding: '6px 12px', border: '1px solid var(--color-border)', fontSize: '11px', fontFamily: 'var(--font-family-mono)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <span style={{ color: 'var(--color-success)', fontWeight: 'bold' }}>STATION: NAVRANGPURA</span>
-          <span style={{ color: 'var(--color-text-secondary)' }}>JURISDICTION: WEST ZONE</span>
+          <span style={{ color: 'var(--color-success)', fontWeight: 'bold' }}>STATION: {stationName}</span>
+          <span style={{ color: 'var(--color-text-secondary)' }}>JURISDICTION: LOCAL ZONE</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <span style={{ color: 'var(--color-success)' }}>● LIVE STATUS</span>
@@ -458,7 +461,7 @@ export default function StationConsolePage() {
               <div style={{ flex: 1, overflowY: 'auto', padding: '0', display: 'flex', flexDirection: 'column' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px', fontFamily: 'var(--font-family-mono)' }}>
                   <tbody>
-                    {patrols.filter(p => p.status !== 'COMPLETED').map((patrol, idx) => (
+                    {patrols.filter(p => ['ASSIGNED', 'ACKNOWLEDGED', 'EN_ROUTE', 'ARRIVED'].includes(p.status)).map((patrol, idx) => (
                       <tr key={idx} style={{ borderBottom: '1px solid var(--color-border)' }}>
                         <td style={{ padding: '6px 8px', color: 'var(--color-text)' }}>P-{String(patrol.id).padStart(3, '0')}</td>
                         <td style={{ padding: '6px 8px', textAlign: 'right' }}>
@@ -466,7 +469,7 @@ export default function StationConsolePage() {
                         </td>
                       </tr>
                     ))}
-                    {patrols.filter(p => p.status !== 'COMPLETED').length === 0 && <tr><td colSpan="2" style={{ padding: '16px', textAlign: 'center', color: 'var(--color-text-muted)' }}>NO ACTIVE UNITS</td></tr>}
+                    {patrols.filter(p => ['ASSIGNED', 'ACKNOWLEDGED', 'EN_ROUTE', 'ARRIVED'].includes(p.status)).length === 0 && <tr><td colSpan="2" style={{ padding: '16px', textAlign: 'center', color: 'var(--color-text-muted)' }}>NO ACTIVE UNITS</td></tr>}
                   </tbody>
                 </table>
                 <div style={{ marginTop: 'auto', padding: '8px', borderTop: '1px solid var(--color-border)', textAlign: 'center', backgroundColor: 'var(--color-bg-dark)' }}>

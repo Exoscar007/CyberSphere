@@ -16,10 +16,12 @@ export default function IncidentPage() {
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
 
-  // New Incident Modal State
   const [showNewModal, setShowNewModal] = useState(false);
   const [newIncident, setNewIncident] = useState({ title: '', description: '', severity: 'HIGH', lat: 23.0225, lng: 72.5714 });
   const [creating, setCreating] = useState(false);
+
+  const profile = JSON.parse(localStorage.getItem('user') || '{}');
+  const stationName = (profile.station_name || profile.username?.replace('station_', '') || 'LOCAL JURISDICTION').toUpperCase();
 
   const fetchIncidents = async () => {
     setLoading(true);
@@ -151,7 +153,7 @@ export default function IncidentPage() {
                       <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary)', fontWeight: 'bold' }}>{displayId}</td>
                       <td style={{ padding: '10px 12px', color: color, fontWeight: 'bold' }}>{incident.severity}</td>
                       <td style={{ padding: '10px 12px', color: 'var(--color-text)', maxWidth: '250px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{incident.title.toUpperCase()}</td>
-                      <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary)' }}>NAVRANGPURA</td>
+                      <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary)' }}>{stationName}</td>
                       <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary)' }}>{timeStr}</td>
                       <td style={{ padding: '10px 12px', color: statusColor, fontWeight: 'bold' }}>{assignmentStatus}</td>
                       <td style={{ padding: '10px 12px', textAlign: 'right', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>

@@ -55,18 +55,18 @@ class DashboardService:
                 
             if time_filter == '1h':
                 threshold = now - datetime.timedelta(hours=1)
-                qs = qs.filter(start_time__gte=threshold)
+                qs = qs.filter(Q(start_time__gte=threshold) | Q(status__in=ACTIVE_ASSIGNMENT_STATUSES))
             elif time_filter == '24h':
                 threshold = now - datetime.timedelta(hours=24)
-                qs = qs.filter(start_time__gte=threshold)
+                qs = qs.filter(Q(start_time__gte=threshold) | Q(status__in=ACTIVE_ASSIGNMENT_STATUSES))
             elif time_filter == '7d':
                 threshold = now - datetime.timedelta(days=7)
-                qs = qs.filter(start_time__gte=threshold)
+                qs = qs.filter(Q(start_time__gte=threshold) | Q(status__in=ACTIVE_ASSIGNMENT_STATUSES))
             elif time_filter == '30d':
                 threshold = now - datetime.timedelta(days=30)
-                qs = qs.filter(start_time__gte=threshold)
+                qs = qs.filter(Q(start_time__gte=threshold) | Q(status__in=ACTIVE_ASSIGNMENT_STATUSES))
             elif time_filter == 'month':
-                qs = qs.filter(start_time__year=now.year, start_time__month=now.month)
+                qs = qs.filter(Q(start_time__year=now.year, start_time__month=now.month) | Q(status__in=ACTIVE_ASSIGNMENT_STATUSES))
             elif time_filter == 'custom':
                 if start_date:
                     qs = qs.filter(start_time__gte=start_date)

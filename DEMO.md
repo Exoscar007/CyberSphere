@@ -41,3 +41,17 @@ To ensure maximum reliability during field deployments—where network connectiv
 
 ## 4. Conclusion
 "CyberSphere takes law enforcement from reactive paper-pushing to proactive intelligence. The MVP proves out the architecture—from the PostGIS data modeling to the highly resilient React frontend UI. Thank you."
+
+## 5. CyberSphere MVP Demo Checklist
+1. Start Docker: `docker compose up -d --build`
+2. Start application: `cd frontend && npm run dev`
+3. Login as City Command: username `admin`, password `admin123`
+4. Demonstrate recent incidents: Show the Map and KPIs.
+5. Change filters: Select 'Last 24 Hours' and 'CRITICAL' severity.
+6. Show GIS/map: Navigate to Analytics & Maps.
+7. Show intelligence: Run AI Prediction.
+8. Login/use Station view: Log out, log in as `station_navrangpura` (password: `station123`).
+9. Show active patrols: Point out the dispatch queue and live patrol tracking.
+10. Show operational history: Navigate to Operational History page.
+11. Show completed operation/audit trail: Click on an incident to view audit.
+12. Show evidence where available: Review evidence attached to the incident.

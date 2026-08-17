@@ -4,9 +4,10 @@ from .services import AuthService
 from .models import CustomUser
 
 class UserResponseSerializer(serializers.ModelSerializer):
+    station_name = serializers.CharField(source='station.name', read_only=True)
     class Meta:
         model = CustomUser
-        fields = ('id', 'username', 'role', 'badge_number', 'phone_number')
+        fields = ('id', 'username', 'role', 'badge_number', 'phone_number', 'station_name')
 
 class StationPatrolSerializer(serializers.ModelSerializer):
     is_busy = serializers.BooleanField(read_only=True)

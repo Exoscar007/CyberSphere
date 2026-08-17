@@ -66,7 +66,7 @@ export default function Header() {
           {new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderLeft: '1px solid var(--color-border)', paddingLeft: '24px' }}>
-          <span style={{ fontWeight: 'bold' }}>{isStation ? 'NAVRANGPURA POLICE STATION' : (profile.username?.toUpperCase() || 'OFFICER')}</span>
+          <span style={{ fontWeight: 'bold' }}>{isStation ? ((profile.station_name || profile.username?.replace('station_', '') || 'LOCAL JURISDICTION').toUpperCase() + ' POLICE STATION') : (profile.username?.toUpperCase() || 'OFFICER')}</span>
           <span style={{ color: 'var(--color-primary-light)' }}>[{profile.role || 'PERSONNEL'}]</span>
           <button 
             onClick={handleLogout} 
