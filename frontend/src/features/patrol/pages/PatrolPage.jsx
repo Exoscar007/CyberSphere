@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { MapContainer, TileLayer, CircleMarker, Popup, useMapEvents, Marker } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, Popup, useMapEvents, Marker, useMap } from 'react-leaflet';
 import api from '../../../services/api';
 
 const AHMEDABAD_CENTER = [23.0225, 72.5714];
@@ -41,6 +41,29 @@ export default function PatrolPage() {
   });
   const [destination, setDestination] = useState(null);
   const [mapCenter, setMapCenter] = useState(AHMEDABAD_CENTER);
+
+  const isValidCoord = (c) => c && c.length === 2 && typeof c[0] === 'number' && typeof c[1] === 'number';
+
+  const MapUpdater = ({ recommendations, selectedIncident }) => {
+    const map = useMap();
+    useEffect(() => {
+      let bounds = [];
+      
+      if (recommendations && recommendations.length > 0) {
+        recommendations.forEach(r => {
+          if (r.lat && r.lng) bounds.push([r.lat, r.lng]);
+        });
+        if (selectedIncident && selectedIncident.location_input?.coordinates) {
+          bounds.push([selectedIncident.location_input.coordinates[1], selectedIncident.location_input.coordinates[0]]);
+        }
+      }
+
+      if (bounds.length > 0) {
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+      }
+    }, [recommendations, selectedIncident, map]);
+    return null;
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -84,7 +107,13 @@ export default function PatrolPage() {
     } catch {}
   };
 
-  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    if (name === 'officer' && value) {
+      setRecommendations(null);
+    }
+  };
 
   const handleIncidentChange = (e) => {
     const id = e.target.value;
@@ -191,6 +220,35 @@ export default function PatrolPage() {
            <div style={{ flex: 1, backgroundColor: '#0b101a' }}>
              <MapContainer key={mapCenter.join(',')} center={mapCenter} zoom={13} style={{ height: '100%', width: '100%', backgroundColor: '#0b101a' }}>
                <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+               <MapUpdater recommendations={recommendations} selectedIncident={selectedIncident} />
+               {/* Recommended Patrol Markers */}
+               {recommendations && recommendations.map(r => (
+                 r.lat && r.lng ? (
+                   <CircleMarker
+                     key={`rec-${r.patrol_id}`}
+                     center={[r.lat, r.lng]}
+                     radius={6}
+                     pathOptions={{ color: '#00c8ff', fillColor: '#00c8ff', fillOpacity: 0.8, weight: 2 }}
+                     eventHandlers={{
+                       click: () => {
+                         setFormData(prev => ({ ...prev, officer: String(r.patrol_id) }));
+                         setRecommendations(null);
+                       }
+                     }}
+                   >
+                     <Popup>
+                       <div style={{ fontFamily: 'var(--font-family-mono)', fontSize: '10px' }}>
+                         <strong style={{ color: '#00c8ff' }}>AVAILABLE PATROL</strong><br/>
+                         <strong>Officer:</strong> {r.officer_name.toUpperCase()} {r.badge_number && `[${r.badge_number}]`}<br/>
+                         <strong>Distance:</strong> {(r.distance_meters / 1000).toFixed(2)} km<br/>
+                         <button style={{ marginTop: '8px', background: 'var(--color-primary)', border: 'none', color: 'white', padding: '4px 8px', cursor: 'pointer', width: '100%', fontWeight: 'bold' }}>
+                           CLICK TO SELECT
+                         </button>
+                       </div>
+                     </Popup>
+                   </CircleMarker>
+                 ) : null
+               ))}
                {selectedIncident && selectedIncident.location_input && (
                  <CircleMarker 
                    center={[selectedIncident.location_input.coordinates[1], selectedIncident.location_input.coordinates[0]]} 
@@ -378,9 +436,9 @@ export default function PatrolPage() {
             <div className="empty-state__title">No patrol assignments</div>
           </div>
         ) : (
-          <div className="table-container">
+          <div className="table-container" style={{ maxHeight: '400px', overflowY: 'auto' }}>
             <table className="data-table">
-              <thead>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 1, backgroundColor: 'var(--color-surface)' }}>
                 <tr><th>ID</th><th>Officer</th><th>Incident</th><th>Zone</th><th>Priority</th><th>Status</th><th>Started</th></tr>
               </thead>
               <tbody>

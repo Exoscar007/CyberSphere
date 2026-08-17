@@ -54,6 +54,66 @@ def generate_hourly_weights(cat_info):
             weights[h % 24] += 1.0
     return weights / weights.sum()
 
+def generate_patrol_route(start_lng, start_lat, end_lng, end_lat, start_time, end_time, status, rng):
+    pts = []
+    
+    if status in ['ASSIGNED', 'ACKNOWLEDGED']:
+        num_points = rng.integers(2, 5)
+        progress_max = 0.05
+    elif status == 'EN_ROUTE':
+        num_points = rng.integers(5, 15)
+        progress_max = rng.uniform(0.3, 0.8)
+    else: # ARRIVED or COMPLETED
+        num_points = rng.integers(8, 20)
+        progress_max = 1.0
+
+    total_duration = (end_time - start_time).total_seconds()
+    if total_duration <= 0:
+        total_duration = 60
+        
+    travel_time = total_duration * 0.7 if status == 'COMPLETED' else total_duration
+    time_step = travel_time / max(1, num_points - 1)
+    
+    dx = end_lng - start_lng
+    dy = end_lat - start_lat
+    px = -dy
+    py = dx
+    curve_magnitude = rng.uniform(-0.01, 0.01)
+    
+    for i in range(num_points):
+        t = i / max(1, num_points - 1) 
+        current_t = t * progress_max
+        
+        cx = start_lng + dx * current_t
+        cy = start_lat + dy * current_t
+        
+        curve_factor = np.sin(current_t * np.pi) * curve_magnitude
+        cx += px * curve_factor
+        cy += py * curve_factor
+        
+        cx += rng.normal(0, 0.0005)
+        cy += rng.normal(0, 0.0005)
+        
+        pt_dt = start_time + datetime.timedelta(seconds=time_step * i)
+        pts.append({'lng': cx, 'lat': cy, 'dt': pt_dt})
+        
+    if status in ['ARRIVED', 'COMPLETED']:
+        hover_points = rng.integers(3, 8)
+        hover_start_time = start_time + datetime.timedelta(seconds=travel_time)
+        hover_duration = total_duration - travel_time
+        
+        if hover_duration > 0:
+            h_step = hover_duration / max(1, hover_points)
+            for i in range(1, hover_points + 1):
+                hx = end_lng + rng.normal(0, 0.0003)
+                hy = end_lat + rng.normal(0, 0.0003)
+                pts.append({
+                    'lng': hx,
+                    'lat': hy,
+                    'dt': hover_start_time + datetime.timedelta(seconds=h_step * i)
+                })
+    return pts
+
 class Command(BaseCommand):
     help = 'Generates a rich, deterministic historical dataset for CyberSphere MVP'
 
@@ -319,6 +379,9 @@ class Command(BaseCommand):
         completed_pas_count = 0
         active_pas_count = {'ASSIGNED': 0, 'ACKNOWLEDGED': 0, 'EN_ROUTE': 0, 'ARRIVED': 0}
         
+        from patrol.models import PatrolLocation
+        locations_to_create = []
+        
         for p_info in assignments_to_create:
             inc = p_info['inc']
             officer = p_info['officer']
@@ -378,6 +441,34 @@ class Command(BaseCommand):
                         uploaded_by=officer
                     )
                     Evidence.objects.filter(id=ev.id).update(uploaded_at=end_dt)
+
+            # GENERATE GPS TRACKS
+            effective_end_dt = end_dt if not is_active else end_date
+            st_cfg_matched = next((s for st, s in stations if st.id == inc.station_id), None)
+            
+            start_lng = st_cfg_matched['lng'] + float(rng.normal(0, 0.002))
+            start_lat = st_cfg_matched['lat'] + float(rng.normal(0, 0.002))
+            end_lng = inc.location.x
+            end_lat = inc.location.y
+            
+            route_pts = generate_patrol_route(
+                start_lng, start_lat, end_lng, end_lat,
+                start_dt, effective_end_dt, status, rng
+            )
+            
+            for pt in route_pts:
+                locations_to_create.append(PatrolLocation(
+                    assignment=pa,
+                    location=Point(pt['lng'], pt['lat'], srid=4326),
+                    timestamp=pt['dt']
+                ))
+
+        self.stdout.write(f"Bulk creating {len(locations_to_create)} PatrolLocation records...")
+        orig_timestamps = [loc.timestamp for loc in locations_to_create]
+        created_locs = PatrolLocation.objects.bulk_create(locations_to_create, batch_size=2000)
+        for obj, orig_ts in zip(created_locs, orig_timestamps):
+            obj.timestamp = orig_ts
+        PatrolLocation.objects.bulk_update(created_locs, ['timestamp'], batch_size=2000)
 
         # 8. PRINT EXACT SUMMARY REQUESTED
         incidents_total = Incident.objects.count()
