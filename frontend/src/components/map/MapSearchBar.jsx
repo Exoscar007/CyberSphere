@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { SearchIcon, LocationPinIcon, XIcon, RefreshIcon } from '../common/Icons';
 
 // Common Ahmedabad / Gujarat Police Jurisdiction Key Localities for instant coordinate lookup
 const AHMEDABAD_LOCALITIES = {
@@ -30,7 +31,6 @@ export default function MapSearchBar({ onSelectLocation, isGoogleLoaded, googleM
   const dropdownRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Helper to safely dispatch coordinates to Google Maps
   const dispatchLocation = (lat, lng, title, address) => {
     const numericLat = typeof lat === 'function' ? lat() : Number(lat);
     const numericLng = typeof lng === 'function' ? lng() : Number(lng);
@@ -50,7 +50,6 @@ export default function MapSearchBar({ onSelectLocation, isGoogleLoaded, googleM
     }
   };
 
-  // Fallback geocoding query over web when Google Cloud project billing is not enabled
   const fetchWebGeocode = async (term) => {
     const lower = term.toLowerCase().trim();
     for (const [key, val] of Object.entries(AHMEDABAD_LOCALITIES)) {
@@ -86,7 +85,6 @@ export default function MapSearchBar({ onSelectLocation, isGoogleLoaded, googleM
     return null;
   };
 
-  // Direct search execution (on Enter key or Search button click)
   const executeDirectSearch = (searchTerm) => {
     const term = searchTerm || query;
     if (!term || term.trim().length < 2) return;
@@ -95,7 +93,6 @@ export default function MapSearchBar({ onSelectLocation, isGoogleLoaded, googleM
     setNoResults(false);
     const cleanTerm = term.trim();
 
-    // Check locality dictionary first for sub-millisecond instant lookup
     const lower = cleanTerm.toLowerCase();
     for (const [key, val] of Object.entries(AHMEDABAD_LOCALITIES)) {
       if (lower.includes(key) || key.includes(lower)) {
@@ -107,7 +104,6 @@ export default function MapSearchBar({ onSelectLocation, isGoogleLoaded, googleM
       }
     }
 
-    // Try Google Geocoder
     if (window.google && window.google.maps) {
       const geocoder = new window.google.maps.Geocoder();
       const geocodeOpts = { address: cleanTerm };
@@ -130,7 +126,6 @@ export default function MapSearchBar({ onSelectLocation, isGoogleLoaded, googleM
             topResult.formatted_address
           );
         } else {
-          // If Google geocoder fails due to billing or zero results, use fallback geocoding
           const fallbackLoc = await fetchWebGeocode(cleanTerm);
           setLoading(false);
           if (fallbackLoc) {
@@ -158,7 +153,6 @@ export default function MapSearchBar({ onSelectLocation, isGoogleLoaded, googleM
     }
   };
 
-  // Debounced search for autocomplete suggestions
   useEffect(() => {
     if (!query || query.trim().length < 2) {
       setResults([]);
@@ -173,7 +167,6 @@ export default function MapSearchBar({ onSelectLocation, isGoogleLoaded, googleM
       const trimmed = query.trim();
       const lower = trimmed.toLowerCase();
 
-      // Check locality dictionary for instant suggestion matching
       const localMatches = [];
       for (const [key, val] of Object.entries(AHMEDABAD_LOCALITIES)) {
         if (key.includes(lower) || lower.includes(key) || val.title.toLowerCase().includes(lower)) {
@@ -194,7 +187,6 @@ export default function MapSearchBar({ onSelectLocation, isGoogleLoaded, googleM
         return;
       }
 
-      // Try Google Places API (New)
       if (
         window.google &&
         window.google.maps &&
@@ -230,12 +222,9 @@ export default function MapSearchBar({ onSelectLocation, isGoogleLoaded, googleM
             setIsOpen(true);
             return;
           }
-        } catch {
-          // Fallback
-        }
+        } catch {}
       }
 
-      // Try Google Geocoder
       if (window.google && window.google.maps) {
         const geocoder = new window.google.maps.Geocoder();
         geocoder.geocode({ address: trimmed }, async (geoResults, geoStatus) => {
@@ -256,7 +245,6 @@ export default function MapSearchBar({ onSelectLocation, isGoogleLoaded, googleM
             );
             setIsOpen(true);
           } else {
-            // Web fallback suggestions
             try {
               const encoded = encodeURIComponent(trimmed + ' Ahmedabad');
               const res = await fetch(
@@ -293,23 +281,15 @@ export default function MapSearchBar({ onSelectLocation, isGoogleLoaded, googleM
     return () => clearTimeout(timer);
   }, [query]);
 
-  // Handle clicking an item in the suggestion dropdown
   const handleSelect = async (item) => {
     setIsOpen(false);
     setQuery(item.title);
 
-    // Case 1: Location already present
     if (item.location) {
-      dispatchLocation(
-        item.location.lat,
-        item.location.lng,
-        item.title,
-        item.subtitle
-      );
+      dispatchLocation(item.location.lat, item.location.lng, item.title, item.subtitle);
       return;
     }
 
-    // Case 2: Places API (New) Place object
     if (item.rawSuggestion && item.rawSuggestion.placePrediction) {
       try {
         const place = item.rawSuggestion.placePrediction.toPlace();
@@ -326,11 +306,9 @@ export default function MapSearchBar({ onSelectLocation, isGoogleLoaded, googleM
       } catch {}
     }
 
-    // Case 3: Geocode the title or address
     executeDirectSearch(item.subtitle || item.title);
   };
 
-  // Handle Enter key on search input
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -344,7 +322,6 @@ export default function MapSearchBar({ onSelectLocation, isGoogleLoaded, googleM
     }
   };
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -362,6 +339,7 @@ export default function MapSearchBar({ onSelectLocation, isGoogleLoaded, googleM
           type="button"
           onClick={() => executeDirectSearch(query)}
           title="Search location"
+          aria-label="Search location"
           style={{
             background: 'none',
             border: 'none',
@@ -369,15 +347,16 @@ export default function MapSearchBar({ onSelectLocation, isGoogleLoaded, googleM
             padding: 0,
             display: 'flex',
             alignItems: 'center',
+            color: 'var(--palette-slate-blue)',
           }}
         >
-          <span className="map-search-icon">🔍</span>
+          <SearchIcon size={13} />
         </button>
         <input
           ref={inputRef}
           type="text"
           className="map-search-input"
-          placeholder="Search Google Maps (e.g. Navrangpura, SG Highway, hospital)..."
+          placeholder="Search location (e.g. Navrangpura, SG Highway)..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -386,8 +365,8 @@ export default function MapSearchBar({ onSelectLocation, isGoogleLoaded, googleM
           }}
         />
         {loading && (
-          <span style={{ fontSize: '10px', color: '#3b82f6', marginRight: '6px' }}>
-            ⌛
+          <span style={{ color: 'var(--palette-slate-blue)', display: 'flex', alignItems: 'center', marginRight: '4px' }}>
+            <RefreshIcon size={12} />
           </span>
         )}
         {query && (
@@ -400,8 +379,9 @@ export default function MapSearchBar({ onSelectLocation, isGoogleLoaded, googleM
               setIsOpen(false);
               setNoResults(false);
             }}
+            aria-label="Clear Search"
           >
-            ✕
+            <XIcon size={11} />
           </button>
         )}
       </div>
@@ -420,12 +400,14 @@ export default function MapSearchBar({ onSelectLocation, isGoogleLoaded, googleM
                 }}
                 style={{ cursor: 'pointer' }}
               >
-                <span className="map-search-item-icon">📍</span>
+                <span className="map-search-item-icon" style={{ color: 'var(--palette-slate-blue)', display: 'flex' }}>
+                  <LocationPinIcon size={13} />
+                </span>
                 <div style={{ overflow: 'hidden', pointerEvents: 'none' }}>
                   <div
                     style={{
                       fontWeight: 600,
-                      color: '#f8fafc',
+                      color: 'var(--color-text-primary)',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
@@ -437,7 +419,7 @@ export default function MapSearchBar({ onSelectLocation, isGoogleLoaded, googleM
                     <div
                       style={{
                         fontSize: '10px',
-                        color: '#94a3b8',
+                        color: 'var(--color-text-muted)',
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
@@ -452,29 +434,20 @@ export default function MapSearchBar({ onSelectLocation, isGoogleLoaded, googleM
           ) : noResults ? (
             <div
               style={{
-                padding: '10px 14px',
+                padding: '8px 12px',
                 fontSize: '11px',
-                color: '#94a3b8',
-                fontFamily: 'var(--font-family-mono, monospace)',
+                color: 'var(--color-text-muted)',
+                fontFamily: 'var(--font-mono)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
               }}
             >
-              <span>No places found. Press <strong>Enter</strong> to search globally.</span>
+              <span>No places found. Press <strong>Enter</strong> to search.</span>
               <button
                 type="button"
                 onClick={() => executeDirectSearch(query)}
-                style={{
-                  background: '#3b82f6',
-                  border: 'none',
-                  color: 'white',
-                  padding: '3px 8px',
-                  borderRadius: '2px',
-                  fontSize: '10px',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                }}
+                className="btn btn-primary btn-sm"
               >
                 Search
               </button>

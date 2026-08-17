@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../../services/api';
-
-function getSeverityColor(severity) {
-  if (severity === 'CRITICAL') return 'var(--color-danger)';
-  if (severity === 'HIGH') return 'var(--color-warning)';
-  if (severity === 'MEDIUM') return 'var(--color-info)';
-  return 'var(--color-success)';
-}
+import {
+  PlusIcon,
+  SearchIcon,
+  XIcon,
+  DispatchIcon,
+  FileTextIcon,
+  EyeIcon,
+  AlertCircleIcon,
+} from '../../../components/common/Icons';
 
 export default function IncidentPage() {
   const navigate = useNavigate();
@@ -17,7 +19,13 @@ export default function IncidentPage() {
   const [search, setSearch] = useState('');
 
   const [showNewModal, setShowNewModal] = useState(false);
-  const [newIncident, setNewIncident] = useState({ title: '', description: '', severity: 'HIGH', lat: 23.0225, lng: 72.5714 });
+  const [newIncident, setNewIncident] = useState({
+    title: '',
+    description: '',
+    severity: 'HIGH',
+    lat: 23.0225,
+    lng: 72.5714,
+  });
   const [creating, setCreating] = useState(false);
 
   const profile = JSON.parse(localStorage.getItem('user') || '{}');
@@ -28,9 +36,8 @@ export default function IncidentPage() {
     setError(null);
     try {
       const res = await api.get('/api/crimes/incidents/');
-      // Sort by severity (critical first) then date
       const sorted = res.data.sort((a, b) => {
-        const sevWeight = { 'CRITICAL': 4, 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1 };
+        const sevWeight = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
         return (sevWeight[b.severity] || 0) - (sevWeight[a.severity] || 0);
       });
       setIncidents(sorted);
@@ -41,15 +48,17 @@ export default function IncidentPage() {
     }
   };
 
-  useEffect(() => { fetchIncidents(); }, []);
+  useEffect(() => {
+    fetchIncidents();
+  }, []);
 
   const filtered = incidents.filter((i) => {
-    // Only show active operational incidents (OPEN or active)
     if (i.status === 'RESOLVED' || i.status === 'CANCELLED') return false;
-    
-    return i.title?.toLowerCase().includes(search.toLowerCase()) ||
-           i.description?.toLowerCase().includes(search.toLowerCase()) ||
-           i.severity?.toLowerCase().includes(search.toLowerCase());
+    return (
+      i.title?.toLowerCase().includes(search.toLowerCase()) ||
+      i.description?.toLowerCase().includes(search.toLowerCase()) ||
+      i.severity?.toLowerCase().includes(search.toLowerCase())
+    );
   });
 
   const handleCreateIncident = async () => {
@@ -61,176 +70,288 @@ export default function IncidentPage() {
         severity: newIncident.severity,
         date_occurred: new Date().toISOString(),
         location_input: {
-          type: "Point",
-          coordinates: [parseFloat(newIncident.lng), parseFloat(newIncident.lat)]
-        }
+          type: 'Point',
+          coordinates: [parseFloat(newIncident.lng), parseFloat(newIncident.lat)],
+        },
       };
       await api.post('/api/crimes/incidents/', payload);
       setShowNewModal(false);
       setNewIncident({ title: '', description: '', severity: 'HIGH', lat: 23.0225, lng: 72.5714 });
       fetchIncidents();
     } catch (err) {
-      console.error("Failed to create incident:", err);
-      alert("Failed to create incident. Check required fields.");
+      console.error('Failed to create incident:', err);
+      alert('Failed to create incident. Check required fields.');
     } finally {
       setCreating(false);
     }
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '8px', padding: '8px', backgroundColor: 'var(--color-bg)' }}>
-      
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--color-surface)', padding: '6px 12px', border: '1px solid var(--color-border)', fontSize: '11px', fontFamily: 'var(--font-family-mono)' }}>
-        <span style={{ fontWeight: 'bold' }}>STATION INCIDENT & COMPLAINT QUEUE</span>
-        {error && <span style={{ color: 'var(--color-danger)' }}>{error}</span>}
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 'var(--space-md)' }}>
+      {/* Page Header */}
+      <div className="page-header">
+        <div>
+          <h1 className="page-header__title">Station Incident & Complaint Queue</h1>
+          <p className="page-header__subtitle">Real-time incoming complaints, severity classification, and unit dispatch triage</p>
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <input 
-            placeholder="SEARCH INCIDENTS..." 
-            value={search} 
-            onChange={(e) => setSearch(e.target.value)} 
-            style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'var(--color-text)', padding: '2px 6px', fontSize: '10px', fontFamily: 'var(--font-family-mono)', width: '250px' }}
-          />
-          <button onClick={() => setShowNewModal(true)} style={{ background: 'var(--color-primary)', border: 'none', color: '#fff', padding: '2px 8px', fontSize: '10px', cursor: 'pointer', fontFamily: 'var(--font-family-mono)' }}>NEW INCIDENT</button>
+          <div style={{ position: 'relative', width: '220px' }}>
+            <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', display: 'flex' }}>
+              <SearchIcon size={13} />
+            </span>
+            <input
+              placeholder="Search active queue..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="form-input"
+              style={{ paddingLeft: '26px', height: '30px', fontSize: '11px' }}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowNewModal(true)}
+            className="btn btn-primary"
+            style={{ height: '30px' }}
+          >
+            <PlusIcon size={14} />
+            <span>Record Incident</span>
+          </button>
         </div>
       </div>
 
-      {/* Main Table */}
-      <div style={{ flex: 1, backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0' }}>
+      {error && (
+        <div className="alert alert--error" role="alert">
+          <AlertCircleIcon size={16} />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* Main Table Card */}
+      <div
+        className="card"
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          padding: 0,
+          minHeight: 0,
+          overflow: 'hidden',
+        }}
+      >
+        <div style={{ flex: 1, overflowY: 'auto' }}>
           {loading ? (
-            <div style={{ padding: '16px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '11px', fontFamily: 'var(--font-family-mono)' }}>LOADING QUEUE...</div>
+            <div className="loading-spinner">Loading operational incident queue...</div>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', fontFamily: 'var(--font-family-mono)' }}>
-              <thead style={{ backgroundColor: 'var(--color-bg-dark)', color: 'var(--color-text-secondary)', borderBottom: '1px solid var(--color-border)', position: 'sticky', top: 0 }}>
+            <table className="data-table">
+              <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
                 <tr>
-                  <th style={{ padding: '8px 12px', textAlign: 'left' }}>INCIDENT ID</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'left' }}>PRIORITY</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'left' }}>TYPE / TITLE</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'left' }}>LOCATION</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'left' }}>TIME</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'left' }}>STATUS</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'right' }}>ACTION</th>
+                  <th>Incident ID</th>
+                  <th>Priority</th>
+                  <th>Classification / Title</th>
+                  <th>Precinct</th>
+                  <th>Occurred</th>
+                  <th>Assignment</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((incident, idx) => {
-                  const timeStr = incident.date_occurred ? new Date(incident.date_occurred).toLocaleString([], {month: 'short', day: '2-digit', hour: '2-digit', minute:'2-digit'}) : 'UNKNOWN';
-                  const color = getSeverityColor(incident.severity);
-                  // Generating a pseudo-ID for display density purposes since we don't have one in model
+                {filtered.map((incident) => {
+                  const timeStr = incident.date_occurred
+                    ? new Date(incident.date_occurred).toLocaleString([], {
+                        month: 'short',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
+                    : '—';
                   const displayId = `INC-${String(incident.id).padStart(4, '0')}`;
-                  
-                  // Calculate Assignment Status
+
                   let assignmentStatus = 'UNASSIGNED';
-                  let statusColor = 'var(--color-warning)';
-                  
+                  let statusBadge = 'high';
+
                   if (incident.patrol_assignments && incident.patrol_assignments.length > 0) {
-                    const statuses = incident.patrol_assignments.map(a => a.status);
-                    
+                    const statuses = incident.patrol_assignments.map((a) => a.status);
                     if (statuses.includes('ARRIVED')) {
                       assignmentStatus = 'ARRIVED';
-                      statusColor = 'var(--color-danger)';
+                      statusBadge = 'critical';
                     } else if (statuses.includes('EN_ROUTE')) {
                       assignmentStatus = 'EN_ROUTE';
-                      statusColor = 'var(--color-primary-light)';
+                      statusBadge = 'high';
                     } else if (statuses.includes('ACKNOWLEDGED')) {
                       assignmentStatus = 'ACKNOWLEDGED';
-                      statusColor = 'var(--color-info)';
+                      statusBadge = 'operational';
                     } else if (statuses.includes('ASSIGNED')) {
                       assignmentStatus = 'ASSIGNED';
-                      statusColor = 'var(--color-success)';
-                    } else if (statuses.every(s => s === 'COMPLETED')) {
+                      statusBadge = 'verified';
+                    } else if (statuses.every((s) => s === 'COMPLETED')) {
                       assignmentStatus = 'COMPLETED';
-                      statusColor = 'var(--color-text-muted)';
-                    } else if (statuses.every(s => s === 'CANCELLED')) {
-                      assignmentStatus = 'CANCELLED';
-                      statusColor = 'var(--color-text-muted)';
+                      statusBadge = 'neutral';
                     }
                   }
 
                   return (
-                    <tr key={incident.id} style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
-                      <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary)', fontWeight: 'bold' }}>{displayId}</td>
-                      <td style={{ padding: '10px 12px', color: color, fontWeight: 'bold' }}>{incident.severity}</td>
-                      <td style={{ padding: '10px 12px', color: 'var(--color-text)', maxWidth: '250px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{incident.title.toUpperCase()}</td>
-                      <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary)' }}>{stationName}</td>
-                      <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary)' }}>{timeStr}</td>
-                      <td style={{ padding: '10px 12px', color: statusColor, fontWeight: 'bold' }}>{assignmentStatus}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                        <button onClick={() => navigate('/station/history/' + incident.id)} style={{ background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text)', padding: '2px 8px', fontSize: '9px', cursor: 'pointer', fontFamily: 'var(--font-family-mono)' }}>VIEW</button>
-                        <button onClick={() => navigate('/station/firs')} style={{ background: 'transparent', border: '1px solid var(--color-primary-light)', color: 'var(--color-primary-light)', padding: '2px 8px', fontSize: '9px', cursor: 'pointer', fontFamily: 'var(--font-family-mono)' }}>CREATE FIR</button>
-                        <button onClick={() => navigate('/station/dispatch', { state: { incident } })} style={{ background: 'var(--color-info)', border: 'none', color: '#fff', padding: '2px 8px', fontSize: '9px', cursor: 'pointer', fontFamily: 'var(--font-family-mono)' }}>DISPATCH</button>
+                    <tr key={incident.id}>
+                      <td style={{ color: 'var(--color-text-primary)', fontWeight: '700' }}>
+                        {displayId}
+                      </td>
+                      <td>
+                        <span className={`badge badge--${incident.severity === 'CRITICAL' ? 'critical' : incident.severity === 'HIGH' ? 'high' : 'operational'}`}>
+                          {incident.severity}
+                        </span>
+                      </td>
+                      <td style={{ color: 'var(--color-text-primary)', fontWeight: '600', maxWidth: '240px' }}>
+                        <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {incident.title}
+                        </div>
+                      </td>
+                      <td style={{ color: 'var(--color-text-muted)' }}>{stationName}</td>
+                      <td style={{ color: 'var(--color-text-muted)' }}>{timeStr}</td>
+                      <td>
+                        <span className={`badge badge--${statusBadge}`}>{assignmentStatus}</span>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', gap: '4px' }}>
+                          <button
+                            type="button"
+                            onClick={() => navigate('/station/history/' + incident.id)}
+                            className="btn btn-secondary btn-sm"
+                            title="View Incident Audit"
+                          >
+                            <EyeIcon size={11} />
+                            <span>Audit</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => navigate('/station/firs')}
+                            className="btn btn-secondary btn-sm"
+                            title="Register FIR"
+                          >
+                            <FileTextIcon size={11} />
+                            <span>FIR</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => navigate('/station/dispatch', { state: { incident } })}
+                            className="btn btn-primary btn-sm"
+                            title="Dispatch Patrol Unit"
+                          >
+                            <DispatchIcon size={11} />
+                            <span>Dispatch</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
                 })}
-                {filtered.length === 0 && <tr><td colSpan="7" style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>NO INCIDENTS IN QUEUE</td></tr>}
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan="7" style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                      No active incidents in queue.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           )}
         </div>
       </div>
-      
+
       {/* NEW INCIDENT MODAL */}
       {showNewModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '16px', width: '400px', display: 'flex', flexDirection: 'column' }}>
-            <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', color: 'white' }}>CREATE NEW INCIDENT</h3>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>TITLE / TYPE</label>
-                <input 
-                  value={newIncident.title} 
-                  onChange={e => setNewIncident({...newIncident, title: e.target.value})} 
-                  style={{ width: '100%', padding: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'white' }} 
+        <div className="modal-overlay" onClick={() => setShowNewModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="card-header">
+              <span className="card-title">Record Incident Triage Entry</span>
+              <button
+                type="button"
+                onClick={() => setShowNewModal(false)}
+                style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', padding: '4px' }}
+                aria-label="Close Modal"
+              >
+                <XIcon size={16} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+              <div className="form-group">
+                <label className="form-label" htmlFor="new_inc_title">Incident Title / Offense</label>
+                <input
+                  id="new_inc_title"
+                  value={newIncident.title}
+                  onChange={(e) => setNewIncident({ ...newIncident, title: e.target.value })}
+                  placeholder="e.g. Commercial burglary alarm triggered"
+                  className="form-input"
+                  required
                 />
               </div>
-              
-              <div>
-                <label style={{ display: 'block', fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>DESCRIPTION</label>
-                <textarea 
-                  value={newIncident.description} 
-                  onChange={e => setNewIncident({...newIncident, description: e.target.value})} 
-                  style={{ width: '100%', padding: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'white', minHeight: '60px' }} 
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="new_inc_desc">Statement / Narrative</label>
+                <textarea
+                  id="new_inc_desc"
+                  value={newIncident.description}
+                  onChange={(e) => setNewIncident({ ...newIncident, description: e.target.value })}
+                  className="form-input"
+                  rows={3}
+                  placeholder="Provide preliminary dispatch notes..."
+                  required
                 />
               </div>
-              
-              <div>
-                <label style={{ display: 'block', fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>SEVERITY</label>
-                <select 
-                  value={newIncident.severity} 
-                  onChange={e => setNewIncident({...newIncident, severity: e.target.value})} 
-                  style={{ width: '100%', padding: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'white' }}>
-                  <option value="CRITICAL">CRITICAL</option>
-                  <option value="HIGH">HIGH</option>
-                  <option value="MEDIUM">MEDIUM</option>
-                  <option value="LOW">LOW</option>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="new_inc_sev">Severity Level</label>
+                <select
+                  id="new_inc_sev"
+                  value={newIncident.severity}
+                  onChange={(e) => setNewIncident({ ...newIncident, severity: e.target.value })}
+                  className="form-input"
+                >
+                  <option value="CRITICAL">Critical Priority</option>
+                  <option value="HIGH">High Priority</option>
+                  <option value="MEDIUM">Medium Priority</option>
+                  <option value="LOW">Low Priority</option>
                 </select>
               </div>
-              
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>LATITUDE</label>
-                  <input type="number" step="0.0001" value={newIncident.lat} onChange={e => setNewIncident({...newIncident, lat: e.target.value})} style={{ width: '100%', padding: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'white' }} />
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label" htmlFor="new_inc_lat">Latitude</label>
+                  <input
+                    id="new_inc_lat"
+                    type="number"
+                    step="0.0001"
+                    value={newIncident.lat}
+                    onChange={(e) => setNewIncident({ ...newIncident, lat: e.target.value })}
+                    className="form-input"
+                    style={{ fontFamily: 'var(--font-mono)' }}
+                  />
                 </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>LONGITUDE</label>
-                  <input type="number" step="0.0001" value={newIncident.lng} onChange={e => setNewIncident({...newIncident, lng: e.target.value})} style={{ width: '100%', padding: '6px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', color: 'white' }} />
+                <div className="form-group">
+                  <label className="form-label" htmlFor="new_inc_lng">Longitude</label>
+                  <input
+                    id="new_inc_lng"
+                    type="number"
+                    step="0.0001"
+                    value={newIncident.lng}
+                    onChange={(e) => setNewIncident({ ...newIncident, lng: e.target.value })}
+                    className="form-input"
+                    style={{ fontFamily: 'var(--font-mono)' }}
+                  />
                 </div>
               </div>
             </div>
-            
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '24px' }}>
-              <button onClick={() => setShowNewModal(false)} style={{ background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text)', padding: '6px 16px', cursor: 'pointer' }}>CANCEL</button>
-              <button onClick={handleCreateIncident} disabled={creating} style={{ background: 'var(--color-primary)', border: 'none', color: 'white', padding: '6px 16px', cursor: 'pointer', opacity: creating ? 0.5 : 1 }}>
-                {creating ? 'CREATING...' : 'CREATE INCIDENT'}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: 'var(--space-md)' }}>
+              <button type="button" onClick={() => setShowNewModal(false)} className="btn btn-secondary">
+                Cancel
+              </button>
+              <button type="button" onClick={handleCreateIncident} disabled={creating} className="btn btn-primary">
+                {creating ? 'Recording...' : 'File Incident'}
               </button>
             </div>
           </div>
         </div>
       )}
-
     </div>
   );
 }

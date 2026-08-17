@@ -13,39 +13,45 @@ import {
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import MapSearchBar from './MapSearchBar';
+import {
+  LayersIcon,
+  CompassIcon,
+  RefreshIcon,
+  MaximizeIcon,
+} from '../common/Icons';
 import './CyberMap.css';
 
 const DEFAULT_CENTER = [23.0225, 72.5714]; // Ahmedabad center
 
-// Base Layer Tile Definitions
+// Base Layer Tile Definitions (Light/Neutral Dominant with Serene Skies fallback)
 const BASE_LAYERS = {
   voyager: {
-    name: '📍 Standard (Roads & POIs)',
+    name: 'Standard (Roads & POIs)',
     url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
     attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap',
     maxZoom: 20,
   },
   osm: {
-    name: '🗺️ OpenStreetMap Detailed',
+    name: 'OpenStreetMap Detailed',
     url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     attribution: '&copy; OpenStreetMap contributors',
     maxZoom: 19,
   },
   satellite: {
-    name: '🛰️ Satellite Aerial',
+    name: 'Satellite Aerial',
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     attribution: 'Tiles &copy; Esri',
     maxZoom: 19,
   },
   hybrid: {
-    name: '🌐 Hybrid (Satellite + Roads)',
+    name: 'Hybrid (Satellite + Roads)',
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     overlayUrl: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png',
     attribution: 'Tiles &copy; Esri & Carto',
     maxZoom: 19,
   },
   dark: {
-    name: '🌙 Tactical Dark GIS',
+    name: 'Tactical Dark GIS',
     url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
     attribution: '&copy; CARTO &copy; OpenStreetMap',
     maxZoom: 20,
@@ -53,17 +59,17 @@ const BASE_LAYERS = {
 };
 
 function getSeverityColor(sev) {
-  if (sev === 'CRITICAL') return '#ef4444';
-  if (sev === 'HIGH') return '#f59e0b';
-  if (sev === 'MEDIUM') return '#3b82f6';
-  return '#10b981';
+  if (sev === 'CRITICAL') return '#A35139'; // Truffle Trouble Terracotta
+  if (sev === 'HIGH') return '#D97A26';     // Burning Flame Deep
+  if (sev === 'MEDIUM') return '#285570';   // Velasca Coastal Blue
+  return '#2A6B65';                         // Marine Teal
 }
 
 function getRiskColor(score) {
-  if (score >= 75) return '#ef4444';
-  if (score >= 50) return '#f59e0b';
-  if (score >= 25) return '#3b82f6';
-  return '#10b981';
+  if (score >= 75) return '#A35139';
+  if (score >= 50) return '#D97A26';
+  if (score >= 25) return '#285570';
+  return '#2A6B65';
 }
 
 function getRiskLabel(score) {
@@ -88,17 +94,17 @@ const isValidCoord = (c) =>
 // Custom Leaflet DivIcon for Destination Pin
 const destinationIcon = L.divIcon({
   className: 'custom-dest-pin',
-  html: `<div style="display:flex;align-items:center;justify-content:center;width:24px;height:24px;background:#f59e0b;color:#111827;border-radius:50%;font-size:12px;font-weight:bold;border:2px solid #ffffff;box-shadow:0 0 8px rgba(245,158,11,0.8);">🎯</div>`,
-  iconSize: [24, 24],
-  iconAnchor: [12, 12],
+  html: `<div style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;background:#C48753;color:#FFFFFF;border-radius:50%;font-size:10px;font-weight:700;border:2px solid #FFFFFF;box-shadow:0 1px 4px rgba(0,0,0,0.25);">T</div>`,
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
 });
 
 // Custom Search Highlight Pin
 const searchIcon = L.divIcon({
   className: 'custom-search-pin',
-  html: `<div style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;background:#3b82f6;color:white;border-radius:50%;font-size:14px;border:2px solid #ffffff;box-shadow:0 0 12px #3b82f6;">📍</div>`,
-  iconSize: [28, 28],
-  iconAnchor: [14, 14],
+  html: `<div style="display:flex;align-items:center;justify-content:center;width:24px;height:24px;background:#94A7AE;color:#FFFFFF;border-radius:50%;font-size:11px;border:2px solid #FFFFFF;box-shadow:0 1px 4px rgba(0,0,0,0.25);">S</div>`,
+  iconSize: [24, 24],
+  iconAnchor: [12, 12],
 });
 
 // Map Controller for Zoom, Pan, Geolocation, and Search flying
@@ -118,7 +124,7 @@ function MapController({
   useEffect(() => {
     if (selectedSearchLoc) {
       map.flyTo([selectedSearchLoc.lat, selectedSearchLoc.lng], 16, {
-        duration: 1.5,
+        duration: 1.2,
       });
     }
   }, [selectedSearchLoc, map]);
@@ -129,7 +135,7 @@ function MapController({
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           (pos) => {
-            map.flyTo([pos.coords.latitude, pos.coords.longitude], 15, { duration: 1.5 });
+            map.flyTo([pos.coords.latitude, pos.coords.longitude], 15, { duration: 1.2 });
           },
           (err) => console.warn('Geolocation error:', err)
         );
@@ -140,14 +146,14 @@ function MapController({
   // Reset focus trigger
   useEffect(() => {
     if (resetTrigger > 0) {
-      map.flyTo(center || DEFAULT_CENTER, zoom || 12, { duration: 1.2 });
+      map.flyTo(center || DEFAULT_CENTER, zoom || 12, { duration: 1.0 });
     }
   }, [resetTrigger, center, zoom, map]);
 
   // Auto-fit bounds on initial data load if enabled
   useEffect(() => {
     if (autoFit && boundsData && boundsData.length > 0) {
-      map.fitBounds(boundsData, { padding: [50, 50], maxZoom: 16 });
+      map.fitBounds(boundsData, { padding: [40, 40], maxZoom: 15 });
     }
   }, [boundsData, autoFit, map]);
 
@@ -185,12 +191,11 @@ export default function LeafletFallbackMapView({
   patrolAssignments = null,
   autoFit = true,
 }) {
-  const [activeLayerKey, setActiveLayerKey] = useState('voyager'); // Default to clear, Google Maps-style Voyager tiles
+  const [activeLayerKey, setActiveLayerKey] = useState('voyager'); // Default to clear, clean Carto Voyager tiles
   const [showLayerMenu, setShowLayerMenu] = useState(false);
   const [searchLocation, setSearchLocation] = useState(null);
   const [locateTrigger, setLocateTrigger] = useState(0);
   const [resetTrigger, setResetTrigger] = useState(0);
-  const [currentZoom, setCurrentZoom] = useState(zoom);
 
   const activeLayer = BASE_LAYERS[activeLayerKey] || BASE_LAYERS.voyager;
 
@@ -244,19 +249,21 @@ export default function LeafletFallbackMapView({
       />
 
       {/* Provider Badge */}
-      <div className="map-provider-badge map-provider-badge--fallback" title="Running in fallback mode. Add VITE_GOOGLE_MAPS_API_KEY in .env for official Google Maps.">
+      <div className="map-provider-badge map-provider-badge--fallback" title="Running in high-performance GIS fallback engine.">
         <div className="map-provider-badge__dot" />
-        <span>Carto / OpenStreetMap (Fallback)</span>
+        <span>GIS Vector Layer</span>
       </div>
 
       {/* Floating Control Buttons */}
       <div className="map-floating-controls">
         <button
+          type="button"
           className="map-ctrl-btn"
           title="Map Layer Switcher"
+          aria-label="Map Layer Switcher"
           onClick={() => setShowLayerMenu(!showLayerMenu)}
         >
-          🗺️
+          <LayersIcon size={14} />
         </button>
 
         {showLayerMenu && (
@@ -264,6 +271,7 @@ export default function LeafletFallbackMapView({
             {Object.entries(BASE_LAYERS).map(([key, config]) => (
               <button
                 key={key}
+                type="button"
                 className={`map-layer-option ${activeLayerKey === key ? 'active' : ''}`}
                 onClick={() => {
                   setActiveLayerKey(key);
@@ -277,25 +285,31 @@ export default function LeafletFallbackMapView({
         )}
 
         <button
+          type="button"
           className="map-ctrl-btn"
-          title="Locate Me"
+          title="Locate Current Position"
+          aria-label="Locate Current Position"
           onClick={() => setLocateTrigger((c) => c + 1)}
         >
-          🎯
+          <CompassIcon size={14} />
         </button>
         <button
+          type="button"
           className="map-ctrl-btn"
-          title="Reset View"
+          title="Reset Map Center"
+          aria-label="Reset Map Center"
           onClick={() => setResetTrigger((c) => c + 1)}
         >
-          🔄
+          <RefreshIcon size={14} />
         </button>
         <button
+          type="button"
           className="map-ctrl-btn"
-          title="Fullscreen"
+          title="Fullscreen Toggle"
+          aria-label="Fullscreen Toggle"
           onClick={handleToggleFullscreen}
         >
-          ⛶
+          <MaximizeIcon size={14} />
         </button>
       </div>
 
@@ -303,7 +317,7 @@ export default function LeafletFallbackMapView({
         center={center}
         zoom={zoom}
         zoomControl={false}
-        style={{ height: '100%', width: '100%', backgroundColor: '#0b101a' }}
+        style={{ height: '100%', width: '100%', backgroundColor: '#EEE9DF' }}
       >
         <MapController
           selectedSearchLoc={searchLocation}
@@ -338,10 +352,10 @@ export default function LeafletFallbackMapView({
                 loc.location.coordinates[1],
                 loc.location.coordinates[0],
               ])}
-            color="#10b981"
-            weight={4}
-            opacity={0.9}
-            dashArray="6, 8"
+            color="#64766A"
+            weight={3.5}
+            opacity={0.85}
+            dashArray="4, 6"
           />
         )}
 
@@ -358,7 +372,7 @@ export default function LeafletFallbackMapView({
               <Polyline
                 key={assign.id}
                 positions={path}
-                color="#3b82f6"
+                color="#94A7AE"
                 weight={3}
                 opacity={0.8}
               />
@@ -376,26 +390,26 @@ export default function LeafletFallbackMapView({
 
           return (
             <React.Fragment key={`inc-${incident.id || idx}`}>
-              {/* Radar pulse for Critical alerts */}
+              {/* Radar pulse ring for Critical alerts */}
               {isCritical && (
                 <CircleMarker
                   center={[lat, lng]}
-                  radius={16}
+                  radius={14}
                   pathOptions={{
-                    color: '#ef4444',
-                    fillColor: '#ef4444',
+                    color: '#C85A74',
+                    fillColor: '#C85A74',
                     fillOpacity: 0.15,
                     weight: 1,
-                    dashArray: '3, 6',
+                    dashArray: '3, 4',
                   }}
                 />
               )}
 
               <CircleMarker
                 center={[lat, lng]}
-                radius={isCritical ? 8 : 6}
+                radius={isCritical ? 7 : 5.5}
                 pathOptions={{
-                  color: '#ffffff',
+                  color: '#FFFFFF',
                   fillColor: color,
                   fillOpacity: 0.95,
                   weight: 2,
@@ -419,6 +433,7 @@ export default function LeafletFallbackMapView({
                     </div>
                     {onViewAudit && (
                       <button
+                        type="button"
                         className="cyber-map-popup-btn"
                         onClick={() => onViewAudit(incident.id)}
                       >
@@ -446,16 +461,16 @@ export default function LeafletFallbackMapView({
                   center={[dest[1], dest[0]]}
                   radius={5}
                   pathOptions={{
-                    color: '#3b82f6',
-                    fillColor: '#3b82f6',
+                    color: '#94A7AE',
+                    fillColor: '#94A7AE',
                     fillOpacity: 0.4,
-                    weight: 2,
-                    dashArray: '4, 4',
+                    weight: 1.5,
+                    dashArray: '3, 3',
                   }}
                 >
                   <Popup>
                     <div className="cyber-map-popup">
-                      <div className="cyber-map-popup-header" style={{ color: '#60a5fa' }}>
+                      <div className="cyber-map-popup-header" style={{ color: '#94A7AE' }}>
                         <span>ASSIGNMENT #{patrol.id} DESTINATION</span>
                       </div>
                       <div><strong>Incident:</strong> #{patrol.incident}</div>
@@ -471,30 +486,29 @@ export default function LeafletFallbackMapView({
               {/* Live GPS Unit */}
               {isValidCoord(gps) ? (
                 <React.Fragment>
-                  {/* Glowing pulse ring */}
                   <CircleMarker
                     center={[gps[1], gps[0]]}
-                    radius={14}
+                    radius={12}
                     pathOptions={{
-                      color: '#10b981',
-                      fillColor: '#10b981',
+                      color: '#64766A',
+                      fillColor: '#64766A',
                       fillOpacity: 0.15,
                       weight: 1,
                     }}
                   />
                   <CircleMarker
                     center={[gps[1], gps[0]]}
-                    radius={7}
+                    radius={6}
                     pathOptions={{
-                      color: '#ffffff',
-                      fillColor: '#10b981',
+                      color: '#FFFFFF',
+                      fillColor: '#64766A',
                       fillOpacity: 1,
                       weight: 2,
                     }}
                   >
                     <Popup>
                       <div className="cyber-map-popup">
-                        <div className="cyber-map-popup-header" style={{ color: '#10b981' }}>
+                        <div className="cyber-map-popup-header" style={{ color: '#64766A' }}>
                           <span>LIVE GPS: P-{String(patrol.id).padStart(3, '0')}</span>
                         </div>
                         <div><strong>Officer:</strong> {patrol.officer_username}</div>
@@ -507,9 +521,10 @@ export default function LeafletFallbackMapView({
                         </div>
                         {onTrackPatrol && (
                           <button
+                            type="button"
                             className="cyber-map-popup-btn"
                             style={{
-                              background: isTracking ? '#ef4444' : '#10b981',
+                              background: isTracking ? '#C85A74' : '#64766A',
                             }}
                             onClick={() => onTrackPatrol(patrol.id)}
                           >
@@ -524,21 +539,21 @@ export default function LeafletFallbackMapView({
                 isValidCoord(dest) && (
                   <CircleMarker
                     center={[dest[1], dest[0]]}
-                    radius={6}
+                    radius={5}
                     pathOptions={{
-                      color: '#ffffff',
-                      fillColor: '#f59e0b',
+                      color: '#FFFFFF',
+                      fillColor: '#C48753',
                       fillOpacity: 1,
-                      weight: 2,
+                      weight: 1.5,
                     }}
                   >
                     <Popup>
                       <div className="cyber-map-popup">
-                        <div className="cyber-map-popup-header" style={{ color: '#f59e0b' }}>
-                          <span>LIVE GPS: P-{String(patrol.id).padStart(3, '0')}</span>
+                        <div className="cyber-map-popup-header" style={{ color: '#C48753' }}>
+                          <span>UNIT: P-{String(patrol.id).padStart(3, '0')}</span>
                         </div>
                         <div><strong>Officer:</strong> {patrol.officer_username}</div>
-                        <div style={{ color: '#ef4444' }}><strong>Status:</strong> GPS UNAVAILABLE</div>
+                        <div style={{ color: '#C85A74' }}><strong>Status:</strong> GPS PENDING</div>
                       </div>
                     </Popup>
                   </CircleMarker>
@@ -553,7 +568,7 @@ export default function LeafletFallbackMapView({
           <Marker position={[destination.lat, destination.lng]} icon={destinationIcon}>
             <Popup>
               <div className="cyber-map-popup">
-                <strong>DISPATCH DESTINATION</strong>
+                <strong>DISPATCH TARGET</strong>
                 <div>{destination.lat.toFixed(5)}, {destination.lng.toFixed(5)}</div>
               </div>
             </Popup>
@@ -567,10 +582,10 @@ export default function LeafletFallbackMapView({
               selectedIncident.location_input.coordinates[1],
               selectedIncident.location_input.coordinates[0],
             ]}
-            radius={9}
+            radius={8}
             pathOptions={{
-              color: '#ffffff',
-              fillColor: '#ef4444',
+              color: '#FFFFFF',
+              fillColor: '#C85A74',
               fillOpacity: 0.9,
               weight: 2,
             }}
@@ -591,10 +606,10 @@ export default function LeafletFallbackMapView({
               <CircleMarker
                 key={`rec-${r.patrol_id}`}
                 center={[r.lat, r.lng]}
-                radius={7}
+                radius={6.5}
                 pathOptions={{
-                  color: '#ffffff',
-                  fillColor: '#00c8ff',
+                  color: '#FFFFFF',
+                  fillColor: '#C0A9BD',
                   fillOpacity: 0.9,
                   weight: 2,
                 }}
@@ -608,13 +623,14 @@ export default function LeafletFallbackMapView({
               >
                 <Popup>
                   <div className="cyber-map-popup">
-                    <div className="cyber-map-popup-header" style={{ color: '#00c8ff' }}>
+                    <div className="cyber-map-popup-header" style={{ color: '#C0A9BD' }}>
                       <span>AVAILABLE PATROL</span>
                     </div>
                     <div><strong>Officer:</strong> {r.officer_name.toUpperCase()} {r.badge_number && `[${r.badge_number}]`}</div>
                     <div><strong>Distance:</strong> {(r.distance_meters / 1000).toFixed(2)} km</div>
                     {onSelectRecommendation && (
                       <button
+                        type="button"
                         className="cyber-map-popup-btn"
                         onClick={() => onSelectRecommendation(r.patrol_id)}
                       >
@@ -636,16 +652,16 @@ export default function LeafletFallbackMapView({
               <CircleMarker
                 key={`zone-${idx}`}
                 center={[coords[1], coords[0]]}
-                radius={Math.max(14, zone.score / 3.5)}
+                radius={Math.max(12, zone.score / 3.5)}
                 pathOptions={{
                   color,
                   fillColor: color,
-                  fillOpacity: 0.35,
+                  fillOpacity: 0.3,
                   weight: 1.5,
                 }}
               >
                 <Tooltip permanent direction="center" opacity={0.9}>
-                  <span style={{ fontSize: '10px', fontWeight: 700, color: '#ffffff' }}>
+                  <span style={{ fontSize: '9px', fontWeight: 700, color: '#242E29', fontFamily: 'var(--font-mono)' }}>
                     {zone.zone_name.substring(0, 3).toUpperCase()}
                   </span>
                 </Tooltip>

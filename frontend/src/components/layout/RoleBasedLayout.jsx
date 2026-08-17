@@ -1,13 +1,15 @@
 import React from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import Header from './Header';
 import CityCommandSidebar from './CityCommandSidebar';
 import StationConsoleSidebar from './StationConsoleSidebar';
 import OfficerWorkspaceSidebar from './OfficerWorkspaceSidebar';
 
 export default function RoleBasedLayout({ role }) {
+  const location = useLocation();
+  const isMapView = location.pathname.endsWith('/overview') || location.pathname === '/city' || location.pathname === '/station';
+
   let SidebarComponent;
-  
   if (role === 'ADMIN') {
     SidebarComponent = CityCommandSidebar;
   } else if (role === 'STATION') {
@@ -17,11 +19,11 @@ export default function RoleBasedLayout({ role }) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', backgroundColor: 'var(--color-bg)' }}>
+    <div className="app-layout">
       <Header />
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <div className="app-layout__body">
         <SidebarComponent />
-        <main style={{ flex: 1, overflowY: 'hidden', padding: 0 }}>
+        <main className={`app-layout__main ${isMapView ? 'app-layout__main--map-view' : ''}`}>
           <Outlet />
         </main>
       </div>

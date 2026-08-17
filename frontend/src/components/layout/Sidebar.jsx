@@ -3,18 +3,20 @@ import { NavLink } from 'react-router-dom';
 
 export default function Sidebar() {
   const activeStyle = {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderLeft: '4px solid var(--color-accent)'
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    color: '#FFFFFF',
+    fontWeight: '700',
   };
   
   const linkStyle = {
     display: 'block',
-    padding: '12px 24px',
-    color: '#e2e8f0',
+    padding: '10px 20px',
+    margin: '2px 8px',
+    borderRadius: 'var(--radius-xs)',
+    color: '#C3D1DE',
     textDecoration: 'none',
-    borderLeft: '4px solid transparent',
-    transition: 'all 0.2s',
-    fontSize: '14px',
+    transition: 'background-color var(--transition-fast), color var(--transition-fast)',
+    fontSize: '13.5px',
     fontWeight: '500'
   };
 

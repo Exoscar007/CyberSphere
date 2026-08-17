@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../../services/api';
+import { FileTextIcon, AlertCircleIcon, LocationPinIcon } from '../../../components/common/Icons';
 
 export default function InvestigatorWorkspacePage() {
   const [firs, setFirs] = useState([]);
@@ -22,64 +23,93 @@ export default function InvestigatorWorkspacePage() {
   }, []);
 
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
       <div className="page-header">
-        <h1 className="page-header__title">Investigator Workspace</h1>
-        <p className="page-header__subtitle">My Active Cases & Investigations</p>
+        <div>
+          <h1 className="page-header__title">Investigator Case Workspace</h1>
+          <p className="page-header__subtitle">Assigned cases, investigation ledgers, and forensic review</p>
+        </div>
       </div>
 
-      {error && <div className="alert alert--error">{error}</div>}
+      {error && (
+        <div className="alert alert--error" role="alert">
+          <AlertCircleIcon size={16} />
+          <span>{error}</span>
+        </div>
+      )}
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: 'var(--space-md) var(--space-lg)', backgroundColor: 'var(--color-bg-dark)', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold' }}>My Active Cases ({firs.length})</div>
-          <div style={{ display: 'flex', gap: 'var(--space-md)' }}>
-            <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-family-mono)' }}>FILTER: OPEN</span>
-            <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-family-mono)' }}>SORT: PRIORITY</span>
+        <div
+          style={{
+            padding: '10px 14px',
+            backgroundColor: 'var(--palette-chalk)',
+            borderBottom: '1px solid var(--color-border)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <span className="card-title">
+            <FileTextIcon size={16} />
+            My Active Cases ({firs.length})
+          </span>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>FILTER: ALL</span>
           </div>
         </div>
 
         {loading ? (
-          <div className="loading-spinner">Loading cases...</div>
+          <div className="loading-spinner">Loading case ledger...</div>
         ) : firs.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state__icon">📂</div>
+            <div className="empty-state__icon">
+              <FileTextIcon size={24} />
+            </div>
             <div className="empty-state__title">No Active Cases</div>
-            <div className="empty-state__text">You currently have no cases assigned to you.</div>
+            <div className="empty-state__text">You currently have no cases assigned to your call-sign.</div>
           </div>
         ) : (
           <div className="table-container" style={{ border: 'none' }}>
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Case ID</th>
+                  <th>FIR Number</th>
                   <th>Priority</th>
                   <th>Status</th>
-                  <th>Location (Lat/Lng)</th>
-                  <th>Assigned Date</th>
-                  <th>Action</th>
+                  <th>Location GPS</th>
+                  <th>Date Registered</th>
+                  <th style={{ textAlign: 'right' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {firs.map(fir => (
+                {firs.map((fir) => (
                   <tr key={fir.id}>
-                    <td style={{ fontWeight: 'bold', color: 'var(--color-info)' }}>{fir.fir_number}</td>
+                    <td style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>{fir.fir_number}</td>
                     <td>
-                      <span className="badge badge--danger">HIGH</span>
+                      <span className="badge badge--high">HIGH</span>
                     </td>
                     <td>
-                      <span className={`badge badge--${fir.status === 'OPEN' ? 'warning' : fir.status === 'CLOSED' ? 'success' : 'info'}`}>
-                        {fir.status}
+                      <span className={`badge badge--${fir.status === 'OPEN' ? 'operational' : fir.status === 'CLOSED' ? 'verified' : 'high'}`}>
+                        {fir.status || 'OPEN'}
                       </span>
                     </td>
-                    <td>
-                      {fir.location && fir.location.coordinates ? 
-                        `${fir.location.coordinates[1].toFixed(4)}, ${fir.location.coordinates[0].toFixed(4)}` : 
-                        '—'}
+                    <td style={{ color: 'var(--color-text-muted)' }}>
+                      {fir.location && fir.location.coordinates ? (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                          <LocationPinIcon size={11} />
+                          {fir.location.coordinates[1].toFixed(3)}, {fir.location.coordinates[0].toFixed(3)}
+                        </span>
+                      ) : (
+                        '—'
+                      )}
                     </td>
-                    <td>{fir.date_reported ? new Date(fir.date_reported).toLocaleDateString() : '—'}</td>
-                    <td>
-                      <button className="btn btn--secondary" style={{ padding: '4px 8px', fontSize: '10px' }}>OPEN CASE</button>
+                    <td style={{ color: 'var(--color-text-muted)' }}>
+                      {fir.created_at ? new Date(fir.created_at).toLocaleDateString() : '—'}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button type="button" className="btn btn-secondary btn-sm" style={{ padding: '3px 8px', fontSize: '10px' }}>
+                        Inspect Case
+                      </button>
                     </td>
                   </tr>
                 ))}

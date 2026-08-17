@@ -2,6 +2,16 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 import { MarkerClusterer } from '@googlemaps/markerclusterer';
 import MapSearchBar from './MapSearchBar';
+import {
+  LayersIcon,
+  CompassIcon,
+  RefreshIcon,
+  MaximizeIcon,
+  PlusIcon,
+  MinusIcon,
+  LockIcon,
+  AlertCircleIcon,
+} from '../common/Icons';
 import './CyberMap.css';
 
 const DEFAULT_CENTER = { lat: 23.0225, lng: 72.5714 }; // Ahmedabad Center
@@ -52,6 +62,7 @@ export default function GoogleMapView({
   patrolAssignments = null,
   autoFit = true,
   onResetKey = null,
+  onError = null,
 }) {
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -72,14 +83,17 @@ export default function GoogleMapView({
   useEffect(() => {
     window.gm_authFailure = () => {
       const err = 'Google Maps authentication failed. Please check your VITE_GOOGLE_MAPS_API_KEY, billing status, and Google Cloud Console API restrictions for localhost.';
-      console.error(err);
+      console.warn(err);
       setLoadError(err);
+      if (typeof onError === 'function') {
+        onError(err);
+      }
     };
 
     return () => {
       delete window.gm_authFailure;
     };
-  }, []);
+  }, [onError]);
 
   // Initialize Google Maps API using modern functional API
   useEffect(() => {
@@ -506,7 +520,6 @@ export default function GoogleMapView({
         position: { lat: destination.lat, lng: destination.lng },
         map,
         title: 'Dispatch Destination',
-        animation: google.maps.Animation.BOUNCE,
         icon: {
           path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
           scale: 6,
@@ -627,60 +640,66 @@ export default function GoogleMapView({
       {isLoaded && (
         <div className="map-floating-controls">
           <button
+            type="button"
             className="map-ctrl-btn"
             title="Map Type / Layers"
+            aria-label="Map Type / Layers"
             onClick={() => setShowLayerMenu(!showLayerMenu)}
           >
-            🗺️
+            <LayersIcon size={14} />
           </button>
 
           {showLayerMenu && (
             <div className="map-layer-menu">
               <button
+                type="button"
                 className={`map-layer-option ${mapType === 'roadmap' ? 'active' : ''}`}
                 onClick={() => handleSetMapType('roadmap')}
               >
-                📍 Roadmap (Default)
+                Roadmap (Default)
               </button>
               <button
+                type="button"
                 className={`map-layer-option ${mapType === 'satellite' ? 'active' : ''}`}
                 onClick={() => handleSetMapType('satellite')}
               >
-                🛰️ Satellite (Imagery)
+                Satellite (Imagery)
               </button>
               <button
+                type="button"
                 className={`map-layer-option ${mapType === 'hybrid' ? 'active' : ''}`}
                 onClick={() => handleSetMapType('hybrid')}
               >
-                🌐 Hybrid (Aerial + Roads)
+                Hybrid (Aerial + Roads)
               </button>
               <button
+                type="button"
                 className={`map-layer-option ${mapType === 'terrain' ? 'active' : ''}`}
                 onClick={() => handleSetMapType('terrain')}
               >
-                ⛰️ Terrain
+                Terrain
               </button>
             </div>
           )}
 
-          <button className="map-ctrl-btn" title="Zoom In" onClick={handleZoomIn}>
-            ➕
+          <button type="button" className="map-ctrl-btn" title="Zoom In" aria-label="Zoom In" onClick={handleZoomIn}>
+            <PlusIcon size={14} />
           </button>
-          <button className="map-ctrl-btn" title="Zoom Out" onClick={handleZoomOut}>
-            ➖
+          <button type="button" className="map-ctrl-btn" title="Zoom Out" aria-label="Zoom Out" onClick={handleZoomOut}>
+            <MinusIcon size={14} />
           </button>
-          <button className="map-ctrl-btn" title="Locate Me" onClick={handleLocateMe}>
-            🎯
+          <button type="button" className="map-ctrl-btn" title="Locate Me" aria-label="Locate Me" onClick={handleLocateMe}>
+            <CompassIcon size={14} />
           </button>
-          <button className="map-ctrl-btn" title="Focus Operational Area" onClick={handleResetFocus}>
-            🔄
+          <button type="button" className="map-ctrl-btn" title="Focus Operational Area" aria-label="Focus Operational Area" onClick={handleResetFocus}>
+            <RefreshIcon size={14} />
           </button>
-          <button className="map-ctrl-btn" title="Fullscreen" onClick={handleToggleFullscreen}>
-            ⛶
+          <button type="button" className="map-ctrl-btn" title="Fullscreen" aria-label="Fullscreen" onClick={handleToggleFullscreen}>
+            <MaximizeIcon size={14} />
           </button>
           {onResetKey && (
-            <button className="map-ctrl-btn" title="Change Google Maps API Key" onClick={onResetKey}>
-              🔑
+            <button type="button" className="map-ctrl-btn" title="Change Google Maps API Key" aria-label="Change Google Maps API Key" onClick={onResetKey}>
+              <LockIcon size={14} />
             </button>
           )}
         </div>
@@ -694,38 +713,32 @@ export default function GoogleMapView({
             left: '20px',
             right: '20px',
             padding: '16px',
-            background: 'rgba(239, 68, 68, 0.95)',
-            color: 'white',
-            borderRadius: '6px',
+            background: 'var(--palette-chalk)',
+            color: 'var(--color-text-primary)',
+            border: '1px solid var(--color-critical-border)',
+            borderRadius: 'var(--radius-xs)',
             fontSize: '12px',
-            fontFamily: 'monospace',
+            fontFamily: 'var(--font-mono)',
             zIndex: 2000,
-            boxShadow: '0 8px 16px rgba(0,0,0,0.5)',
+            boxShadow: 'var(--shadow-lg)',
           }}
         >
-          <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px' }}>
-            ⚠️ Google Maps failed to load
+          <div style={{ fontWeight: '700', fontSize: '13px', marginBottom: '4px', color: 'var(--color-critical)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <AlertCircleIcon size={16} />
+            <span>Google Maps failed to load</span>
           </div>
           <div>{loadError}</div>
-          <div style={{ marginTop: '10px', fontSize: '11px', color: '#fef2f2' }}>
+          <div style={{ marginTop: '8px', fontSize: '11px', color: 'var(--color-text-muted)' }}>
             Ensure <strong>Maps JavaScript API</strong> and <strong>Places API</strong> are enabled in your Google Cloud Console project, and check that your API key is correctly configured in <code>frontend/.env</code> as <code>VITE_GOOGLE_MAPS_API_KEY</code>.
           </div>
           {onResetKey && (
             <button
+              type="button"
               onClick={onResetKey}
-              style={{
-                marginTop: '12px',
-                padding: '6px 12px',
-                background: 'white',
-                color: '#ef4444',
-                border: 'none',
-                borderRadius: '4px',
-                fontWeight: 700,
-                fontSize: '11px',
-                cursor: 'pointer',
-              }}
+              className="btn btn-secondary btn-sm"
+              style={{ marginTop: '10px' }}
             >
-              Enter a Different API Key
+              Reset Key
             </button>
           )}
         </div>

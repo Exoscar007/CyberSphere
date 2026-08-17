@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../../services/api';
+import { SearchIcon, FileTextIcon, PlusIcon, CheckIcon, AlertCircleIcon } from '../../../components/common/Icons';
 
 export default function ComplaintPage() {
   const [complaints, setComplaints] = useState([]);
@@ -33,7 +34,7 @@ export default function ComplaintPage() {
     try {
       await api.post('/api/crimes/complaints/', formData);
       setFormData({ description: '' });
-      setSuccess('Complaint filed successfully.');
+      setSuccess('Public complaint officially logged in the system.');
       fetchComplaints();
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to submit complaint.');
@@ -47,60 +48,121 @@ export default function ComplaintPage() {
   );
 
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
       <div className="page-header">
-        <h1 className="page-header__title">Complaint Management</h1>
-        <p className="page-header__subtitle">File and track public complaints</p>
+        <div>
+          <h1 className="page-header__title">Citizen Complaint Intake & Ledger</h1>
+          <p className="page-header__subtitle">Log, categorize, and track citizen reports and general station complaints</p>
+        </div>
       </div>
 
-      {error && <div className="alert alert--error">{error}</div>}
-      {success && <div className="alert alert--success">{success}</div>}
+      {error && (
+        <div className="alert alert--error" role="alert">
+          <AlertCircleIcon size={16} />
+          <span>{error}</span>
+        </div>
+      )}
+      {success && (
+        <div className="alert alert--success" role="status">
+          <CheckIcon size={16} />
+          <span>{success}</span>
+        </div>
+      )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: 'var(--space-xl)', alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 'var(--space-md)', alignItems: 'start' }}>
         <div className="card">
-          <div className="card__title" style={{ marginBottom: 'var(--space-lg)' }}>File New Complaint</div>
+          <div className="card-header">
+            <span className="card-title">
+              <PlusIcon size={15} />
+              Intake New Complaint
+            </span>
+          </div>
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label className="form-label">Description</label>
-              <textarea name="description" value={formData.description}
+              <label className="form-label" htmlFor="comp_desc">Detailed Complaint Narrative</label>
+              <textarea
+                id="comp_desc"
+                name="description"
+                value={formData.description}
                 onChange={(e) => setFormData({ description: e.target.value })}
-                className="form-input" required rows="6" placeholder="Describe the complaint in detail..." />
+                className="form-input"
+                required
+                rows={5}
+                placeholder="Enter complainant details, time of incident, and summary of grievance..."
+              />
             </div>
-            <button type="submit" className="btn btn--primary btn--full" disabled={submitLoading}>
-              {submitLoading ? 'Submitting...' : 'File Complaint'}
+            <button type="submit" className="btn btn-primary btn-full" disabled={submitLoading}>
+              {submitLoading ? 'Recording...' : 'File Citizen Complaint'}
             </button>
           </form>
         </div>
 
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: 'var(--space-lg)', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div className="card__title">Complaints ({filtered.length})</div>
-            <div className="search-bar">
-              <span className="search-bar__icon">🔍</span>
-              <input placeholder="Search complaints..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          <div
+            style={{
+              padding: '10px 14px',
+              borderBottom: '1px solid var(--color-border)',
+              backgroundColor: 'var(--palette-chalk)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '10px',
+            }}
+          >
+            <span className="card-title">
+              <FileTextIcon size={16} />
+              Master Complaints Archive ({filtered.length})
+            </span>
+            <div style={{ position: 'relative', width: '200px' }}>
+              <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', display: 'flex' }}>
+                <SearchIcon size={13} />
+              </span>
+              <input
+                placeholder="Search complaints..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="form-input"
+                style={{ paddingLeft: '26px', height: '28px', fontSize: '11px' }}
+              />
             </div>
           </div>
+
           {loading ? (
-            <div className="loading-spinner">Loading complaints...</div>
+            <div className="loading-spinner">Loading intake queue...</div>
           ) : filtered.length === 0 ? (
             <div className="empty-state">
-              <div className="empty-state__icon">📝</div>
+              <div className="empty-state__icon">
+                <FileTextIcon size={24} />
+              </div>
               <div className="empty-state__title">{search ? 'No matching complaints' : 'No complaints filed'}</div>
               <div className="empty-state__text">Complaints will appear here once filed.</div>
             </div>
           ) : (
-            <div className="table-container">
+            <div style={{ maxHeight: '460px', overflowY: 'auto' }}>
               <table className="data-table">
-                <thead><tr><th>ID</th><th>Description</th><th>Status</th><th>Date Filed</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th>Ref ID</th>
+                    <th>Statement & Narrative</th>
+                    <th>Status</th>
+                    <th>Filed Date</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {filtered.map((c) => (
                     <tr key={c.id}>
-                      <td>#{c.id}</td>
-                      <td style={{ maxWidth: '400px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <td style={{ color: 'var(--color-text-primary)', fontWeight: '700' }}>#{c.id}</td>
+                      <td style={{ maxWidth: '360px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {c.description}
                       </td>
-                      <td><span className={`badge badge--${c.status === 'RESOLVED' ? 'success' : 'warning'}`}>{c.status}</span></td>
-                      <td style={{ whiteSpace: 'nowrap' }}>{c.date_filed ? new Date(c.date_filed).toLocaleDateString() : '—'}</td>
+                      <td>
+                        <span className={`badge badge--${c.status === 'RESOLVED' ? 'verified' : 'high'}`}>
+                          {c.status}
+                        </span>
+                      </td>
+                      <td style={{ color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
+                        {c.date_filed ? new Date(c.date_filed).toLocaleDateString() : '—'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

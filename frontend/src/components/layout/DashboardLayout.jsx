@@ -1,38 +1,48 @@
 import React from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import {
+  SecurityMark,
+  MapIcon,
+  IntelligenceIcon,
+  FileTextIcon,
+  SirenIcon,
+  DispatchIcon,
+  ReportsIcon,
+  UsersIcon,
+} from '../common/Icons';
 
 const navSections = [
   {
     title: 'Overview',
     links: [
-      { to: '/dashboard', label: 'Dashboard', icon: '📊', end: true },
+      { to: '/dashboard', label: 'Dashboard', icon: <MapIcon size={16} />, end: true },
     ],
   },
   {
     title: 'Operations',
     links: [
-      { to: '/dashboard/fir', label: 'FIR Management', icon: '📋' },
-      { to: '/dashboard/incidents', label: 'Incidents', icon: '🚨' },
-      { to: '/dashboard/complaints', label: 'Complaints', icon: '📝' },
+      { to: '/dashboard/fir', label: 'FIR Management', icon: <FileTextIcon size={16} /> },
+      { to: '/dashboard/incidents', label: 'Incidents', icon: <SirenIcon size={16} /> },
+      { to: '/dashboard/complaints', label: 'Complaints', icon: <FileTextIcon size={16} /> },
     ],
   },
   {
     title: 'Intelligence',
     links: [
-      { to: '/dashboard/intelligence', label: 'Analytics & Map', icon: '🗺️' },
+      { to: '/dashboard/intelligence', label: 'Analytics & Map', icon: <IntelligenceIcon size={16} /> },
     ],
   },
   {
     title: 'Field Operations',
     links: [
-      { to: '/dashboard/patrol', label: 'Patrol Management', icon: '🚔' },
+      { to: '/dashboard/patrol', label: 'Patrol Management', icon: <DispatchIcon size={16} /> },
     ],
   },
   {
     title: 'System',
     links: [
-      { to: '/dashboard/reports', label: 'Reports & Health', icon: '📈' },
-      { to: '/dashboard/users', label: 'User Management', icon: '👤' },
+      { to: '/dashboard/reports', label: 'Reports & Health', icon: <ReportsIcon size={16} /> },
+      { to: '/dashboard/users', label: 'User Management', icon: <UsersIcon size={16} /> },
     ],
   },
 ];
@@ -52,7 +62,8 @@ export default function DashboardLayout() {
     <div className="layout">
       <aside className="layout__sidebar">
         <div className="sidebar__brand">
-          <h1>⬡ CyberSphere</h1>
+          <SecurityMark size={20} />
+          <h1>CyberSphere</h1>
           <span>Command Center</span>
         </div>
 
@@ -87,7 +98,7 @@ export default function DashboardLayout() {
               <div className="sidebar__role">{user.role || 'Officer'}</div>
             </div>
           </div>
-          <button className="btn btn--secondary btn--full btn--sm" onClick={handleLogout}>
+          <button className="btn btn-secondary btn-full btn-sm" onClick={handleLogout}>
             Sign Out
           </button>
         </div>

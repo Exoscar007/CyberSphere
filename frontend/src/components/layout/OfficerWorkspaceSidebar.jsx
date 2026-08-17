@@ -1,51 +1,56 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { FileTextIcon, EyeIcon } from '../common/Icons';
 
 export default function OfficerWorkspaceSidebar() {
-  const activeStyle = {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderLeft: '4px solid var(--color-success)'
-  };
-  
-  const linkStyle = {
-    display: 'block',
-    padding: '12px 24px',
-    color: '#e2e8f0',
-    textDecoration: 'none',
-    borderLeft: '4px solid transparent',
-    transition: 'all 0.2s',
-    fontSize: '14px',
-    fontWeight: '500'
-  };
-
-  const sectionHeader = {
-    padding: '16px 24px 8px',
-    color: 'var(--color-primary-light)',
-    fontSize: '11px',
-    textTransform: 'uppercase',
-    letterSpacing: '1px',
-    fontWeight: '700'
-  };
-
   return (
-    <aside style={{ width: 'var(--sidebar-width)', backgroundColor: 'var(--sidebar-bg)', color: 'white', display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--color-border)' }}>
-      <div style={{ padding: '24px', fontSize: '20px', fontWeight: 'bold', borderBottom: '1px solid var(--color-border-light)' }}>
-        <span style={{color: 'var(--color-success)'}}>Officer</span>Workspace
-      </div>
-      <nav style={{ flex: 1, padding: '16px 0', overflowY: 'auto' }}>
-        <div style={sectionHeader}>Investigator Tasks</div>
-        <NavLink to="/officer/workspace" style={({isActive}) => isActive ? {...linkStyle, ...activeStyle} : linkStyle}>
-          My Cases
+    <aside className="sidebar" aria-label="Officer Workspace Navigation">
+      <nav style={{ flex: 1, padding: '8px 0', overflowY: 'auto' }}>
+        <div className="sidebar__section-title">INVESTIGATOR TASKS</div>
+        <NavLink
+          to="/officer/workspace"
+          className={({ isActive }) =>
+            `sidebar__nav-item ${isActive ? 'sidebar__nav-item--active' : ''}`
+          }
+        >
+          <span className="sidebar__icon">
+            <FileTextIcon size={18} />
+          </span>
+          <span className="sidebar__label">My Cases</span>
         </NavLink>
-        <NavLink to="/officer/create-fir" style={({isActive}) => isActive ? {...linkStyle, ...activeStyle} : linkStyle}>
-          Create FIR
+        <NavLink
+          to="/officer/create-fir"
+          className={({ isActive }) =>
+            `sidebar__nav-item ${isActive ? 'sidebar__nav-item--active' : ''}`
+          }
+        >
+          <span className="sidebar__icon">
+            <FileTextIcon size={18} />
+          </span>
+          <span className="sidebar__label">Create FIR</span>
         </NavLink>
-        
-        <div style={sectionHeader}>Tools</div>
-        <NavLink to="/officer/evidence" style={({isActive}) => isActive ? {...linkStyle, ...activeStyle} : linkStyle}>
-          Evidence Review
+
+        <div className="sidebar__section-title" style={{ marginTop: '10px' }}>
+          EVIDENCE & TOOLS
+        </div>
+        <NavLink
+          to="/officer/evidence"
+          className={({ isActive }) =>
+            `sidebar__nav-item ${isActive ? 'sidebar__nav-item--active' : ''}`
+          }
+        >
+          <span className="sidebar__icon">
+            <EyeIcon size={18} />
+          </span>
+          <span className="sidebar__label">Evidence Review</span>
         </NavLink>
       </nav>
+
+      <div className="sidebar__footer">
+        <div style={{ fontSize: '9px', color: '#FFFFFF', opacity: 0.8, fontFamily: 'var(--font-mono)', textAlign: 'center' }}>
+          OFFICER WORKSPACE
+        </div>
+      </div>
     </aside>
   );
 }
