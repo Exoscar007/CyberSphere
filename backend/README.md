@@ -31,3 +31,33 @@ This will:
 
 ### Documentation
 Swagger documentation is available at `http://localhost:8000/swagger/` once the server is running.
+
+## DATABASE / DEMO DATA
+
+**NORMAL START:**
+```bash
+docker compose up -d
+```
+
+**SAFE TEST:**
+```bash
+docker compose exec -T backend python manage.py test
+```
+
+**RICH DEMO DATA:**
+(Safe, deterministic, rich historical synthetic dataset recommended for demos)
+```bash
+docker compose exec -T backend python manage.py seed_rich_demo_data
+```
+
+**DESTRUCTIVE STATIC SEED:**
+(⚠️ DESTRUCTIVE: Wipes all data and leaves a 2-record static dataset)
+```bash
+docker compose exec -T backend python manage.py seed_demo_data
+```
+
+**DATABASE VOLUME DESTRUCTION:**
+(⚠️ Permanently deletes the PostgreSQL database volume)
+```bash
+docker compose down -v
+```

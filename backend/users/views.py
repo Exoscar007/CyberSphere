@@ -4,7 +4,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework import status
 from drf_yasg.utils import swagger_auto_schema
 from .serializers import LoginRequestSerializer, LoginResponseSerializer, UserResponseSerializer, UserManagementSerializer, StationPatrolSerializer
-from .services import AuthService
+from .services import AuthService, UserService
 from .permissions import IsAdminRole
 
 class LoginAPIView(APIView):
@@ -44,7 +44,7 @@ class UserManagementAPIView(APIView):
 
     @swagger_auto_schema(responses={200: UserManagementSerializer(many=True)})
     def get(self, request):
-        users = AuthService.list_users()
+        users = UserService.get_users()
         serializer = UserManagementSerializer(users, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -60,13 +60,13 @@ class UserDetailAPIView(APIView):
 
     @swagger_auto_schema(responses={200: UserManagementSerializer})
     def get(self, request, pk):
-        user = AuthService.get_user(pk)
+        user = UserService.get_user(pk)
         serializer = UserManagementSerializer(user)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(request_body=UserManagementSerializer, responses={200: UserManagementSerializer})
     def put(self, request, pk):
-        user = AuthService.get_user(pk)
+        user = UserService.get_user(pk)
         serializer = UserManagementSerializer(user, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         result = serializer.save()
@@ -74,5 +74,5 @@ class UserDetailAPIView(APIView):
 
     @swagger_auto_schema(responses={204: 'No Content'})
     def delete(self, request, pk):
-        AuthService.delete_user(pk)
+        UserService.delete_user(pk)
         return Response(status=status.HTTP_204_NO_CONTENT)

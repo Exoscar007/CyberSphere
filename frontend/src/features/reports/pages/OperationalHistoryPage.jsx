@@ -36,7 +36,7 @@ export default function OperationalHistoryPage() {
   // }
 
   return (
-    <div style={{ padding: '24px', color: 'white' }}>
+    <div style={{ padding: '24px', color: 'white', height: '100%', overflowY: 'auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
         <div>
           <h1 style={{ marginBottom: '8px', fontSize: '24px', fontWeight: 'bold' }}>Operational History</h1>
