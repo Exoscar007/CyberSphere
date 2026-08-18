@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import api from '../../../services/api';
+import { useToast } from '../../../context/ToastContext';
 import CyberMap from '../../../components/map/CyberMap';
 import {
   DispatchIcon,
@@ -14,12 +15,31 @@ import {
 
 const AHMEDABAD_CENTER = [23.0225, 72.5714];
 
+function extractErrorMessage(err, defaultMsg) {
+  const data = err.response?.data;
+  if (!data) return err.message || defaultMsg;
+  if (typeof data === 'string') return data;
+  if (data.detail) return data.detail;
+  if (data.error) return data.error;
+  if (data.message) return data.message;
+  const keys = Object.keys(data);
+  if (keys.length > 0) {
+    const key = keys[0];
+    const val = data[key];
+    if (Array.isArray(val)) return `${key}: ${val.join(', ')}`;
+    if (typeof val === 'string') return `${key}: ${val}`;
+  }
+  return defaultMsg;
+}
+
 export default function PatrolPage() {
   const location = useLocation();
+  const { addToast } = useToast();
   const initialIncident = location.state?.incident || null;
+  const initialFIR = location.state?.fir || null;
 
   const [incidents, setIncidents] = useState([]);
-  const [selectedIncidentId, setSelectedIncidentId] = useState(initialIncident?.id || '');
+  const [selectedIncidentId, setSelectedIncidentId] = useState(initialIncident?.id ? String(initialIncident.id) : '');
   const [assignments, setAssignments] = useState([]);
   const [officers, setOfficers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -31,9 +51,9 @@ export default function PatrolPage() {
 
   const [formData, setFormData] = useState({
     officer: '',
-    zone_name: '',
-    priority: 'MEDIUM',
-    instructions: '',
+    zone_name: 'Ahmedabad Central',
+    priority: initialIncident?.severity || 'MEDIUM',
+    instructions: 'Proceed to target coordinates, assess situation, and secure perimeter.',
   });
   const [destination, setDestination] = useState(null);
   const [mapCenter, setMapCenter] = useState(AHMEDABAD_CENTER);
@@ -43,26 +63,73 @@ export default function PatrolPage() {
       setLoading(true);
       try {
         const incRes = await api.get('/api/crimes/incidents/');
-        setIncidents(incRes.data);
+        const incList = incRes.data || [];
+        setIncidents(incList);
 
-        if (initialIncident && initialIncident.location_input) {
-          const coords = initialIncident.location_input.coordinates;
-          if (coords) {
+        // Pre-select incident and coordinates if provided via routing state
+        if (initialIncident) {
+          setSelectedIncidentId(String(initialIncident.id));
+          const coords = initialIncident.location?.coordinates || initialIncident.location_input?.coordinates;
+          if (coords && coords.length === 2) {
             setMapCenter([coords[1], coords[0]]);
+            setDestination({ lat: coords[1], lng: coords[0] });
+          }
+          if (initialIncident.severity) {
+            setFormData((prev) => ({ ...prev, priority: initialIncident.severity }));
+          }
+        } else if (incList.length > 0 && !selectedIncidentId) {
+          // If no initial incident, pre-select first incident for frictionless dispatch
+          const firstInc = incList[0];
+          setSelectedIncidentId(String(firstInc.id));
+          const coords = firstInc.location?.coordinates || firstInc.location_input?.coordinates;
+          if (coords && coords.length === 2) {
+            setMapCenter([coords[1], coords[0]]);
+            setDestination({ lat: coords[1], lng: coords[0] });
+          }
+          if (firstInc.severity) {
+            setFormData((prev) => ({ ...prev, priority: firstInc.severity }));
           }
         }
 
         const assRes = await api.get('/api/patrol/assignments/');
-        setAssignments(assRes.data);
+        setAssignments(assRes.data || []);
 
+        // Fetch Officers: try station-patrols first; fallback to /api/auth/users/ if admin or station not set
+        let patrolOfficers = [];
         try {
           const offRes = await api.get('/api/auth/station-patrols/');
-          setOfficers(offRes.data);
+          if (Array.isArray(offRes.data) && offRes.data.length > 0) {
+            patrolOfficers = offRes.data;
+          }
         } catch (e) {
-          console.warn('Could not fetch station patrols.', e);
+          console.warn('Station patrols query returned non-station status. Querying directory.', e);
+        }
+
+        if (patrolOfficers.length === 0) {
+          try {
+            const allUsersRes = await api.get('/api/auth/users/');
+            if (Array.isArray(allUsersRes.data)) {
+              patrolOfficers = allUsersRes.data
+                .filter((u) => u.role === 'PATROL' || u.role === 'PATROL_OFFICER' || u.role === 'POLICE_OFFICER' || u.role === 'STATION')
+                .map((u) => ({
+                  id: u.id,
+                  username: u.username,
+                  badge_number: u.badge_number,
+                  is_busy: false,
+                }));
+            }
+          } catch (err2) {
+            console.warn('Could not fetch fallback officers directory.', err2);
+          }
+        }
+
+        setOfficers(patrolOfficers);
+        if (patrolOfficers.length > 0) {
+          const firstAvailable = patrolOfficers.find((o) => !o.is_busy) || patrolOfficers[0];
+          setFormData((prev) => ({ ...prev, officer: String(firstAvailable.id) }));
         }
       } catch (err) {
-        setError('Failed to load dispatch data. Please ensure the backend is running.');
+        setError(extractErrorMessage(err, 'Failed to load dispatch console data.'));
       } finally {
         setLoading(false);
       }
@@ -73,7 +140,7 @@ export default function PatrolPage() {
   const fetchAssignments = async () => {
     try {
       const assRes = await api.get('/api/patrol/assignments/');
-      setAssignments(assRes.data);
+      setAssignments(assRes.data || []);
     } catch {}
   };
 
@@ -90,10 +157,15 @@ export default function PatrolPage() {
     setSelectedIncidentId(id);
     setRecommendations(null);
     const inc = incidents.find((i) => String(i.id) === String(id));
-    if (inc && inc.location_input && inc.location_input.coordinates) {
-      const coords = inc.location_input.coordinates;
-      setMapCenter([coords[1], coords[0]]);
-      setDestination(null);
+    if (inc) {
+      const coords = inc.location?.coordinates || inc.location_input?.coordinates;
+      if (coords && coords.length === 2) {
+        setMapCenter([coords[1], coords[0]]);
+        setDestination({ lat: coords[1], lng: coords[0] });
+      }
+      if (inc.severity) {
+        setFormData((prev) => ({ ...prev, priority: inc.severity }));
+      }
     }
   };
 
@@ -106,7 +178,7 @@ export default function PatrolPage() {
       const res = await api.get(`/api/gis/recommend-patrol/?incident_id=${selectedIncidentId}`);
       setRecommendations(res.data);
     } catch (err) {
-      setError(err.response?.data?.detail || err.response?.data?.error || 'Failed to get recommendations.');
+      setError(extractErrorMessage(err, 'Failed to calculate proximity recommendations.'));
     } finally {
       setRecommendLoading(false);
     }
@@ -119,39 +191,51 @@ export default function PatrolPage() {
     setSuccess(null);
 
     if (!selectedIncidentId) {
-      setError('Please select an Incident first.');
+      setError('Please select a Target Incident.');
+      setSubmitLoading(false);
+      return;
+    }
+
+    if (!formData.officer) {
+      setError('Please select a Patrol Officer / Unit.');
       setSubmitLoading(false);
       return;
     }
 
     if (!destination) {
-      setError('Please select a destination on the map.');
+      setError('Please select or pin a destination on the tactical map.');
       setSubmitLoading(false);
       return;
     }
 
+    const payload = {
+      incident: parseInt(selectedIncidentId),
+      officer: parseInt(formData.officer),
+      zone_name: formData.zone_name || 'Ahmedabad Sector',
+      priority: formData.priority || 'MEDIUM',
+      instructions: formData.instructions || 'Standard tactical patrol deployment.',
+      destination: {
+        type: 'Point',
+        coordinates: [parseFloat(destination.lng), parseFloat(destination.lat)],
+      },
+    };
+
     try {
-      await api.post('/api/patrol/assignments/', {
-        incident: parseInt(selectedIncidentId),
-        officer: parseInt(formData.officer),
-        zone_name: formData.zone_name,
-        priority: formData.priority,
-        instructions: formData.instructions,
-        destination: { type: 'Point', coordinates: [destination.lng, destination.lat] },
-      });
-      setFormData({ officer: '', zone_name: '', priority: 'MEDIUM', instructions: '' });
-      setDestination(null);
+      await api.post('/api/patrol/assignments/', payload);
       setSuccess('Patrol unit successfully dispatched to target coordinates.');
+      if (addToast) {
+        addToast('Patrol unit successfully dispatched.', 'success');
+      }
       fetchAssignments();
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to dispatch patrol.');
+      setError(extractErrorMessage(err, 'Failed to dispatch patrol unit.'));
     } finally {
       setSubmitLoading(false);
     }
   };
 
   const selectedIncidentAssignments = assignments.filter(
-    (a) => String(a.incident_details?.id) === String(selectedIncidentId)
+    (a) => String(a.incident_details?.id || a.incident) === String(selectedIncidentId)
   );
   const selectedIncident = incidents.find((i) => String(i.id) === String(selectedIncidentId));
 
@@ -181,13 +265,13 @@ export default function PatrolPage() {
       {/* Main Two-Column Dispatch Interface */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-md)' }}>
         {/* Left: Map Destination Selector */}
-        <div className="card" style={{ padding: 0, overflow: 'hidden', height: '440px', display: 'flex', flexDirection: 'column' }}>
+        <div className="card" style={{ padding: 0, overflow: 'hidden', height: '460px', display: 'flex', flexDirection: 'column' }}>
           <div
             style={{
               padding: '8px 12px',
               borderBottom: '1px solid var(--color-border)',
               backgroundColor: 'var(--palette-chalk)',
-              fontSize: '10px',
+              fontSize: '10.5px',
               fontWeight: '700',
               letterSpacing: '0.6px',
               color: 'var(--color-text-primary)',
@@ -218,18 +302,18 @@ export default function PatrolPage() {
           </div>
           <div
             style={{
-              padding: '6px 12px',
+              padding: '8px 12px',
               backgroundColor: 'var(--palette-chalk)',
               borderTop: '1px solid var(--color-border)',
-              fontSize: '10px',
+              fontSize: '11px',
               color: 'var(--color-text-muted)',
               fontFamily: 'var(--font-mono)',
               display: 'flex',
               alignItems: 'center',
-              gap: '4px',
+              gap: '6px',
             }}
           >
-            <LocationPinIcon size={12} />
+            <LocationPinIcon size={13} style={{ color: 'var(--palette-coastal-blue)' }} />
             {destination
               ? `PINNED TARGET: ${destination.lat.toFixed(5)}, ${destination.lng.toFixed(5)}`
               : 'CLICK MAP TO PIN PATROL DISPATCH DESTINATION'}
@@ -237,8 +321,8 @@ export default function PatrolPage() {
         </div>
 
         {/* Right: Dispatch Configuration Form */}
-        <div className="card" style={{ height: '440px', overflowY: 'auto', padding: 'var(--space-md) var(--space-lg)' }}>
-          <div className="card-header">
+        <div className="card" style={{ height: '460px', overflowY: 'auto', padding: '18px 20px' }}>
+          <div className="card-header" style={{ margin: '-18px -20px 16px -20px', padding: '10px 18px' }}>
             <span className="card-title">
               <DispatchIcon size={15} />
               Dispatch Configuration
@@ -253,7 +337,7 @@ export default function PatrolPage() {
                   type="button"
                   onClick={handleRecommend}
                   disabled={recommendLoading}
-                  className="btn btn-secondary btn-sm"
+                  className="btn btn-secondary btn-xs"
                 >
                   <ZapIcon size={11} />
                   <span>{recommendLoading ? 'Analyzing...' : 'Recommend Patrol'}</span>
@@ -286,14 +370,14 @@ export default function PatrolPage() {
                 borderRadius: 'var(--radius-xs)',
               }}
             >
-              <div style={{ fontSize: '10px', fontWeight: '700', color: 'var(--palette-sage)', marginBottom: '6px', letterSpacing: '0.5px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <div style={{ fontSize: '10.5px', fontWeight: '700', color: 'var(--palette-coastal-blue)', marginBottom: '6px', letterSpacing: '0.5px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <ZapIcon size={12} />
                 Proximity-Ranked Units (GIS)
               </div>
               {recommendations.length === 0 ? (
                 <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>No available nearby patrols found in radius.</div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   {recommendations.map((r) => (
                     <div
                       key={r.patrol_id}
@@ -308,10 +392,10 @@ export default function PatrolPage() {
                       }}
                     >
                       <div>
-                        <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--color-text-primary)' }}>
+                        <div style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--color-text-primary)' }}>
                           {r.officer_name.toUpperCase()} {r.badge_number && `[${r.badge_number}]`}
                         </div>
-                        <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                        <div style={{ fontSize: '10.5px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
                           {r.station} • {(r.distance_meters / 1000).toFixed(2)} km away
                         </div>
                       </div>
@@ -321,7 +405,7 @@ export default function PatrolPage() {
                           setFormData((prev) => ({ ...prev, officer: String(r.patrol_id) }));
                           setRecommendations(null);
                         }}
-                        className="btn btn-primary btn-sm"
+                        className="btn btn-primary btn-xs"
                       >
                         Assign Unit
                       </button>
@@ -332,9 +416,9 @@ export default function PatrolPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label className="form-label" htmlFor="officer_select">Patrol Officer / Unit</label>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" htmlFor="officer_select" style={{ marginBottom: '4px' }}>Patrol Officer / Unit</label>
               {officers.length > 0 ? (
                 <select
                   id="officer_select"
@@ -355,15 +439,15 @@ export default function PatrolPage() {
                   })}
                 </select>
               ) : (
-                <div style={{ color: 'var(--color-critical)', fontSize: '11px' }}>
-                  No available patrol officers found in this station.
+                <div style={{ color: 'var(--color-critical)', fontSize: '11.5px' }}>
+                  No available patrol units found in directory.
                 </div>
               )}
             </div>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label" htmlFor="zone_name">Zone Name</label>
+            <div className="form-row" style={{ margin: 0, gap: '10px' }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" htmlFor="zone_name" style={{ marginBottom: '4px' }}>Sector / Zone</label>
                 <input
                   id="zone_name"
                   name="zone_name"
@@ -374,8 +458,8 @@ export default function PatrolPage() {
                   placeholder="e.g. Navrangpura"
                 />
               </div>
-              <div className="form-group">
-                <label className="form-label" htmlFor="patrol_priority">Priority</label>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" htmlFor="patrol_priority" style={{ marginBottom: '4px' }}>Priority Level</label>
                 <select
                   id="patrol_priority"
                   name="priority"
@@ -391,8 +475,8 @@ export default function PatrolPage() {
               </div>
             </div>
 
-            <div className="form-group">
-              <label className="form-label" htmlFor="instructions">Tactical Instructions</label>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" htmlFor="instructions" style={{ marginBottom: '4px' }}>Tactical Instructions</label>
               <textarea
                 id="instructions"
                 name="instructions"
@@ -408,8 +492,8 @@ export default function PatrolPage() {
             <button
               type="submit"
               className="btn btn-primary btn-full"
-              disabled={submitLoading || !selectedIncidentId || !destination}
-              style={{ marginTop: '4px' }}
+              disabled={submitLoading || !selectedIncidentId || !destination || !formData.officer}
+              style={{ marginTop: '6px', height: '38px', fontWeight: '700' }}
             >
               {submitLoading ? 'Dispatching Unit...' : 'Dispatch Patrol Unit'}
             </button>
@@ -434,7 +518,7 @@ export default function PatrolPage() {
               <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--color-text-primary)' }}>
                 {selectedIncident.title}
               </div>
-              <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '1px', fontFamily: 'var(--font-mono)' }}>
+              <div style={{ fontSize: '10.5px', color: 'var(--color-text-muted)', marginTop: '1px', fontFamily: 'var(--font-mono)' }}>
                 INCIDENT #{selectedIncident.id} | STATUS: {selectedIncident.status}
               </div>
             </div>
@@ -443,12 +527,12 @@ export default function PatrolPage() {
             </span>
           </div>
 
-          <div style={{ padding: '10px 14px', fontSize: '11px', color: 'var(--color-text-secondary)', borderBottom: '1px solid var(--color-border)', lineHeight: 1.45 }}>
+          <div style={{ padding: '10px 14px', fontSize: '11.5px', color: 'var(--color-text-secondary)', borderBottom: '1px solid var(--color-border)', lineHeight: 1.45 }}>
             {selectedIncident.description}
           </div>
 
           <div style={{ padding: '10px 14px' }}>
-            <div style={{ fontSize: '10px', fontWeight: '700', color: 'var(--color-text-secondary)', marginBottom: '6px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+            <div style={{ fontSize: '10.5px', fontWeight: '700', color: 'var(--color-text-secondary)', marginBottom: '6px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
               Assigned Patrol Units for this Incident
             </div>
             {selectedIncidentAssignments.length === 0 ? (

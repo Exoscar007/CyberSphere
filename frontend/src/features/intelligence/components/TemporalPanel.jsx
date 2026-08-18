@@ -44,14 +44,14 @@ export default function TemporalPanel() {
   const maxDaily = stats?.by_day_of_week?.length ? Math.max(...stats.by_day_of_week.map((d) => d.count)) : 1;
 
   return (
-    <div className="card" style={{ padding: 'var(--space-md) var(--space-lg)' }}>
+    <div className="card" style={{ padding: '18px 20px' }}>
       <div
         style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           marginBottom: 'var(--space-md)',
-          borderBottom: '1px solid var(--color-border)',
+          borderBottom: '1px solid var(--color-border-subtle)',
           paddingBottom: 'var(--space-xs)',
         }}
       >
@@ -60,21 +60,21 @@ export default function TemporalPanel() {
           Temporal Analytics & 7-Day Predictive Forecasting
         </span>
         {stats?.period && (
-          <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
+          <span style={{ fontSize: '10.5px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
             DATA ARCHIVE: {new Date(stats.period.start).toLocaleDateString()} — {new Date(stats.period.end).toLocaleDateString()} ({stats.period.total_incidents} INCIDENTS)
           </span>
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 'var(--space-lg)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 'var(--space-xl)' }}>
         {/* Left: Historical Distributions */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
           {/* Hourly Histogram */}
           <div>
-            <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginBottom: '6px', fontWeight: '700' }}>
+            <div style={{ fontSize: '10.5px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginBottom: '6px', fontWeight: '700' }}>
               Hourly Incident Distribution (24h)
             </div>
-            <div style={{ height: '40px', display: 'flex', alignItems: 'flex-end', gap: '2px', borderBottom: '1px solid var(--color-border)', paddingBottom: '2px' }}>
+            <div style={{ height: '44px', display: 'flex', alignItems: 'flex-end', gap: '2px', borderBottom: '1px solid var(--color-border)', paddingBottom: '2px' }}>
               {stats?.by_hour?.map((item) => (
                 <div
                   key={item.hour}
@@ -86,7 +86,7 @@ export default function TemporalPanel() {
                       width: '100%',
                       height: `${(item.count / maxHourly) * 100}%`,
                       minHeight: '2px',
-                      backgroundColor: 'var(--palette-lilac)',
+                      backgroundColor: 'var(--palette-coastal-blue)',
                       opacity: item.count === maxHourly ? 1 : 0.65,
                       borderRadius: '1px',
                     }}
@@ -103,10 +103,10 @@ export default function TemporalPanel() {
 
           {/* DOW Histogram */}
           <div>
-            <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginBottom: '6px', fontWeight: '700' }}>
+            <div style={{ fontSize: '10.5px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginBottom: '6px', fontWeight: '700' }}>
               Day of Week Distribution
             </div>
-            <div style={{ height: '40px', display: 'flex', alignItems: 'flex-end', gap: '4px', borderBottom: '1px solid var(--color-border)', paddingBottom: '2px' }}>
+            <div style={{ height: '44px', display: 'flex', alignItems: 'flex-end', gap: '4px', borderBottom: '1px solid var(--color-border)', paddingBottom: '2px' }}>
               {stats?.by_day_of_week?.map((item) => (
                 <div
                   key={item.day_number}
@@ -118,7 +118,7 @@ export default function TemporalPanel() {
                       width: '100%',
                       height: `${(item.count / maxDaily) * 100}%`,
                       minHeight: '2px',
-                      backgroundColor: 'var(--palette-slate-blue)',
+                      backgroundColor: 'var(--palette-coastal-blue)',
                       opacity: item.day_number >= 5 ? 0.95 : 0.6,
                       borderRadius: '1px',
                     }}
@@ -138,12 +138,12 @@ export default function TemporalPanel() {
 
         {/* Right: AI Predictive Forecast */}
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '6px' }}>
-            <div style={{ fontSize: '10px', color: 'var(--color-high)', textTransform: 'uppercase', fontWeight: '700' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '8px' }}>
+            <div style={{ fontSize: '10.5px', color: 'var(--color-high)', textTransform: 'uppercase', fontWeight: '700' }}>
               7-Day Operational AI Forecast
             </div>
             {forecast?.validation && (
-              <div style={{ fontSize: '9px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
+              <div style={{ fontSize: '9.5px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
                 MODEL: {forecast.model === 'weighted_seasonal_moving_average' ? 'WSMA' : forecast.model} | MAE: {forecast.validation.model_mae?.toFixed(1)}
               </div>
             )}
@@ -154,7 +154,7 @@ export default function TemporalPanel() {
               Insufficient history to generate forecast (Needs {forecast.days_required} days, has {forecast.days_available}).
             </div>
           ) : forecast?.forecast ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 'var(--space-xs)', flex: 1 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 'var(--space-sm)', flex: 1 }}>
               {forecast.forecast.map((item, idx) => (
                 <div
                   key={idx}
@@ -166,16 +166,16 @@ export default function TemporalPanel() {
                     flexDirection: 'column',
                     justifyContent: 'center',
                     alignItems: 'center',
-                    padding: '8px 4px',
+                    padding: '10px 6px',
                   }}
                 >
-                  <div style={{ fontSize: '9px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: '700' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: '700' }}>
                     {item.day_of_week.substring(0, 3)}
                   </div>
-                  <div style={{ fontSize: '16px', fontWeight: '800', color: 'var(--color-high)', margin: '3px 0', fontFamily: 'var(--font-mono)' }}>
+                  <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--color-high)', margin: '4px 0', fontFamily: 'var(--font-mono)' }}>
                     {Math.round(item.predicted_count)}
                   </div>
-                  <div style={{ fontSize: '9px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  <div style={{ fontSize: '9.5px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
                     {new Date(item.date).getDate()} {new Date(item.date).toLocaleString('default', { month: 'short' }).toUpperCase()}
                   </div>
                 </div>
@@ -183,7 +183,7 @@ export default function TemporalPanel() {
             </div>
           ) : null}
 
-          <div style={{ fontSize: '9px', color: 'var(--color-text-muted)', marginTop: '6px', textAlign: 'right', fontStyle: 'italic' }}>
+          <div style={{ fontSize: '9.5px', color: 'var(--color-text-muted)', marginTop: '8px', textAlign: 'right', fontStyle: 'italic' }}>
             {forecast?.disclaimer || '* Estimates based on historical patterns. Not for emergency tactical deployment.'}
           </div>
         </div>

@@ -260,3 +260,19 @@
 .cyber-map-popup-btn:hover {
   background-color: var(--palette-coastal-hover);
 }
+
+/* High-Performance Hardware-Accelerated Instant Tile Rendering */
+.leaflet-tile-container img,
+.leaflet-tile,
+.gm-style canvas,
+.gm-style img {
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  image-rendering: -webkit-optimize-contrast;
+}
+
+.leaflet-container {
+  background-color: #FAF7F6 !important;
+  font-family: var(--font-sans) !important;
+}
+

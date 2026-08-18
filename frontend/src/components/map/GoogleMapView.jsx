@@ -119,10 +119,18 @@ export default function GoogleMapView({
           }
         }
 
-        const { Map, InfoWindow } = await importLibrary('maps');
-        await importLibrary('places');
-        await importLibrary('geometry');
-        await importLibrary('marker');
+        // Load all required Google Maps libraries in parallel with fast timeout
+        const [{ Map, InfoWindow }] = await Promise.race([
+          Promise.all([
+            importLibrary('maps'),
+            importLibrary('places'),
+            importLibrary('geometry'),
+            importLibrary('marker'),
+          ]),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Google Maps network timeout — switching to high-speed GIS')), 1800)
+          ),
+        ]);
 
         if (isCancelled || !mapContainerRef.current) return;
 

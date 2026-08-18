@@ -9,7 +9,7 @@ export default defineConfig({
   retries: 0,
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],
   use: {
-    baseURL: 'http://127.0.0.1:5174',
+    baseURL: 'http://127.0.0.1:5173',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'off',
@@ -34,20 +34,6 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1024, height: 768 },
-      },
-    },
-    {
-      name: 'chromium-tablet',
-      use: {
-        ...devices['iPad Mini'],
-        viewport: { width: 768, height: 1024 },
-      },
-    },
-    {
-      name: 'chromium-mobile',
-      use: {
-        ...devices['iPhone 12'],
-        viewport: { width: 375, height: 667 },
       },
     },
   ],

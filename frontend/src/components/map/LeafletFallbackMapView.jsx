@@ -23,38 +23,55 @@ import './CyberMap.css';
 
 const DEFAULT_CENTER = [23.0225, 72.5714]; // Ahmedabad center
 
-// Base Layer Tile Definitions (Light/Neutral Dominant with Serene Skies fallback)
+// Base Layer Tile Definitions (Defaulting to High-Detail Google Maps & Ultra-Rich GIS)
 const BASE_LAYERS = {
-  voyager: {
-    name: 'Standard (Roads & POIs)',
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap',
+  google_streets: {
+    name: 'Google Maps (Standard & POIs)',
+    url: 'https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+    subdomains: '0123',
+    attribution: '&copy; Google Maps Data',
+    maxZoom: 22,
+    maxNativeZoom: 20,
+  },
+  google_hybrid: {
+    name: 'Google Maps (Satellite Hybrid)',
+    url: 'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+    subdomains: '0123',
+    attribution: '&copy; Google Imagery & Map Data',
+    maxZoom: 22,
+    maxNativeZoom: 20,
+  },
+  google_terrain: {
+    name: 'Google Maps (Terrain & Contours)',
+    url: 'https://mt{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
+    subdomains: '0123',
+    attribution: '&copy; Google Terrain Data',
     maxZoom: 20,
+    maxNativeZoom: 18,
   },
   osm: {
-    name: 'OpenStreetMap Detailed',
+    name: 'OpenStreetMap (Full POIs & Buildings)',
     url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    subdomains: 'abc',
     attribution: '&copy; OpenStreetMap contributors',
     maxZoom: 19,
+    maxNativeZoom: 19,
   },
-  satellite: {
-    name: 'Satellite Aerial',
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attribution: 'Tiles &copy; Esri',
-    maxZoom: 19,
-  },
-  hybrid: {
-    name: 'Hybrid (Satellite + Roads)',
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    overlayUrl: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png',
-    attribution: 'Tiles &copy; Esri & Carto',
-    maxZoom: 19,
+  voyager: {
+    name: 'Carto Voyager (Clean High-Contrast)',
+    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    subdomains: 'abcd',
+    attribution: '&copy; CARTO &copy; OpenStreetMap',
+    maxZoom: 20,
+    maxNativeZoom: 19,
   },
   dark: {
     name: 'Tactical Dark GIS',
     url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    subdomains: 'abcd',
     attribution: '&copy; CARTO &copy; OpenStreetMap',
     maxZoom: 20,
+    maxNativeZoom: 19,
   },
 };
 
@@ -191,13 +208,13 @@ export default function LeafletFallbackMapView({
   patrolAssignments = null,
   autoFit = true,
 }) {
-  const [activeLayerKey, setActiveLayerKey] = useState('voyager'); // Default to clear, clean Carto Voyager tiles
+  const [activeLayerKey, setActiveLayerKey] = useState('google_streets'); // Default to full Google Maps with complete POIs and street details
   const [showLayerMenu, setShowLayerMenu] = useState(false);
   const [searchLocation, setSearchLocation] = useState(null);
   const [locateTrigger, setLocateTrigger] = useState(0);
   const [resetTrigger, setResetTrigger] = useState(0);
 
-  const activeLayer = BASE_LAYERS[activeLayerKey] || BASE_LAYERS.voyager;
+  const activeLayer = BASE_LAYERS[activeLayerKey] || BASE_LAYERS.google_streets;
 
   // Calculate combined bounds for auto-fit
   const boundsData = useMemo(() => {
@@ -334,13 +351,26 @@ export default function LeafletFallbackMapView({
         <TileLayer
           key={activeLayerKey}
           url={activeLayer.url}
+          subdomains={activeLayer.subdomains || 'abc'}
           attribution={activeLayer.attribution}
           maxZoom={activeLayer.maxZoom}
+          maxNativeZoom={activeLayer.maxNativeZoom || 19}
+          keepBuffer={12}
+          updateWhenIdle={false}
+          updateWhenZooming={false}
         />
 
         {/* Optional Hybrid Overlay Layer */}
         {activeLayer.overlayUrl && (
-          <TileLayer url={activeLayer.overlayUrl} maxZoom={activeLayer.maxZoom} />
+          <TileLayer
+            url={activeLayer.overlayUrl}
+            subdomains={activeLayer.subdomains || 'abc'}
+            maxZoom={activeLayer.maxZoom}
+            maxNativeZoom={activeLayer.maxNativeZoom || 18}
+            keepBuffer={12}
+            updateWhenIdle={false}
+            updateWhenZooming={false}
+          />
         )}
 
         {/* 1. Tracked Patrol Route Polyline */}

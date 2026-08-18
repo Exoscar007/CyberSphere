@@ -10,7 +10,6 @@ import {
   TrendingUpIcon,
   LayersIcon,
   CheckIcon,
-  XIcon,
 } from '../../../components/common/Icons';
 
 const AHMEDABAD_CENTER = [23.0225, 72.5714];
@@ -106,7 +105,7 @@ export default function IntelligenceDashboard() {
       <div className="page-header">
         <div>
           <h1 className="page-header__title">Crime Intelligence & Spatial Risk Analysis</h1>
-          <p className="page-header__subtitle">Geographic risk density, spatial frequency vectors, and temporal prediction</p>
+          <p className="page-header__subtitle">Citywide risk density, incident hotspots, and temporal crime trends</p>
         </div>
         <button
           type="button"
@@ -129,7 +128,7 @@ export default function IntelligenceDashboard() {
           aria-modal="true"
           aria-labelledby="confirm-modal-title"
         >
-          <div className="card" style={{ width: '440px', maxWidth: '92vw', padding: '20px', boxShadow: 'var(--shadow-xl)', backgroundColor: '#FAF7F6' }}>
+          <div className="card" style={{ width: '440px', maxWidth: '92vw', padding: '24px', boxShadow: 'var(--shadow-xl)', backgroundColor: '#FAF7F6' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
               <div style={{ color: 'var(--palette-coastal-blue)', display: 'flex' }}>
                 <ZapIcon size={20} />
@@ -138,7 +137,7 @@ export default function IntelligenceDashboard() {
                 Execute AI Risk Prediction
               </h3>
             </div>
-            <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.5, margin: '0 0 16px' }}>
+            <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.5, margin: '0 0 18px' }}>
               Initiate model calculation to recompute spatial risk density and temporal crime forecasting across all municipal sectors?
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
@@ -250,10 +249,10 @@ export default function IntelligenceDashboard() {
               style={{
                 display: 'flex',
                 gap: '16px',
-                padding: '6px 14px',
+                padding: '8px 14px',
                 borderTop: '1px solid var(--color-border)',
                 backgroundColor: 'var(--palette-chalk)',
-                fontSize: '10px',
+                fontSize: '10.5px',
                 fontFamily: 'var(--font-mono)',
               }}
             >
@@ -262,7 +261,7 @@ export default function IntelligenceDashboard() {
                 <span>LOW (0-24)</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--palette-slate-blue)' }} />
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--palette-coastal-blue)' }} />
                 <span>MEDIUM (25-49)</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -283,7 +282,7 @@ export default function IntelligenceDashboard() {
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             <div
               style={{
-                padding: '8px 12px',
+                padding: '10px 14px',
                 backgroundColor: 'var(--palette-chalk)',
                 borderBottom: '1px solid var(--color-border)',
               }}
@@ -303,10 +302,10 @@ export default function IntelligenceDashboard() {
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      padding: '7px 12px',
+                      padding: '8px 14px',
                       borderBottom: '1px solid var(--color-border)',
                       fontFamily: 'var(--font-mono)',
-                      fontSize: '11px',
+                      fontSize: '11.5px',
                     }}
                   >
                     <span style={{ color: 'var(--color-text-primary)', fontWeight: '600' }}>
@@ -320,7 +319,7 @@ export default function IntelligenceDashboard() {
                             : zone.score >= 50
                             ? 'var(--color-high)'
                             : zone.score >= 25
-                            ? 'var(--palette-slate-blue)'
+                            ? 'var(--palette-coastal-blue)'
                             : 'var(--color-verified)',
                         fontWeight: '700',
                       }}
@@ -337,7 +336,7 @@ export default function IntelligenceDashboard() {
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             <div
               style={{
-                padding: '8px 12px',
+                padding: '10px 14px',
                 backgroundColor: 'var(--palette-chalk)',
                 borderBottom: '1px solid var(--color-border)',
               }}
@@ -357,14 +356,14 @@ export default function IntelligenceDashboard() {
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      padding: '7px 12px',
+                      padding: '8px 14px',
                       borderBottom: '1px solid var(--color-border)',
                       fontFamily: 'var(--font-mono)',
-                      fontSize: '11px',
+                      fontSize: '11.5px',
                     }}
                   >
                     <span style={{ color: 'var(--color-text-primary)' }}>{trend.crime_type.toUpperCase()}</span>
-                    <span style={{ color: 'var(--palette-sage)', fontWeight: '700' }}>[{trend.frequency}x]</span>
+                    <span style={{ color: 'var(--palette-coastal-blue)', fontWeight: '700' }}>[{trend.frequency}x]</span>
                   </li>
                 ))}
               </ul>

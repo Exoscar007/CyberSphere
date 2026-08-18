@@ -3,16 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import {
-  SecurityMark,
   SearchIcon,
   ChevronDownIcon,
   ChevronUpIcon,
-  UserIcon,
   SettingsIcon,
   LogOutIcon,
   RefreshIcon,
+  ShieldIcon,
 } from '../common/Icons';
 import CommandPalette from '../common/CommandPalette';
+import SecuritySettingsModal from '../common/SecuritySettingsModal';
 
 export default function Header() {
   const navigate = useNavigate();
@@ -21,6 +21,7 @@ export default function Header() {
   const [timeStr, setTimeStr] = useState(() => new Date().toLocaleTimeString());
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [securityModalOpen, setSecurityModalOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const dropdownRef = useRef(null);
 
@@ -109,9 +110,6 @@ export default function Header() {
         {/* Left: Branding & Jurisdiction Title */}
         <div className="top-header__left">
           <div className="top-header__brand">
-            <div className="top-header__emblem">
-              <SecurityMark size={22} />
-            </div>
             <div>
               <div className="top-header__title">CyberSphere</div>
               <div className="top-header__subtitle">
@@ -201,13 +199,13 @@ export default function Header() {
                   type="button"
                   onClick={() => {
                     setDropdownOpen(false);
-                    if (addToast) addToast('Active command session verified.', 'info');
+                    setSecurityModalOpen(true);
                   }}
                   className="dropdown-item"
                   role="menuitem"
                 >
-                  <UserIcon size={13} />
-                  <span>Personnel Profile</span>
+                  <ShieldIcon size={13} />
+                  <span>Security & MFA Settings</span>
                 </button>
 
                 <button
@@ -247,6 +245,13 @@ export default function Header() {
       <CommandPalette
         isOpen={paletteOpen}
         onClose={() => setPaletteOpen(false)}
+      />
+
+      {/* Security & MFA Settings Modal */}
+      <SecuritySettingsModal
+        isOpen={securityModalOpen}
+        onClose={() => setSecurityModalOpen(false)}
+        onUpdateProfile={(updated) => setProfile(updated)}
       />
     </>
   );

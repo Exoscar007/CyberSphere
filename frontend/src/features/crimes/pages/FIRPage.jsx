@@ -8,20 +8,27 @@ import {
   PlusIcon,
   CheckIcon,
   AlertCircleIcon,
-  LocationPinIcon,
   EyeIcon,
   XIcon,
   DownloadIcon,
-  DispatchIcon,
-  ShieldIcon,
   PrinterIcon,
 } from '../../../components/common/Icons';
 
-function getStatusBadge(status) {
-  if (status === 'INVESTIGATING' || status === 'ASSIGNED') return 'operational';
-  if (status === 'RESOLVED' || status === 'CLOSED') return 'verified';
-  if (status === 'CRITICAL' || status === 'PENDING_APPROVAL') return 'critical';
-  return 'high';
+function extractErrorMessage(err, defaultMsg) {
+  const data = err.response?.data;
+  if (!data) return err.message || defaultMsg;
+  if (typeof data === 'string') return data;
+  if (data.detail) return data.detail;
+  if (data.error) return data.error;
+  if (data.message) return data.message;
+  const keys = Object.keys(data);
+  if (keys.length > 0) {
+    const key = keys[0];
+    const val = data[key];
+    if (Array.isArray(val)) return `${key}: ${val.join(', ')}`;
+    if (typeof val === 'string') return `${key}: ${val}`;
+  }
+  return defaultMsg;
 }
 
 export default function FIRPage() {
@@ -53,9 +60,9 @@ export default function FIRPage() {
     setError(null);
     try {
       const response = await api.get('/api/crimes/fir/');
-      setFirs(response.data);
-    } catch {
-      setError('Unable to load FIR records from the central database.');
+      setFirs(response.data || []);
+    } catch (err) {
+      setError(extractErrorMessage(err, 'Unable to load FIR records from the central database.'));
     } finally {
       setLoading(false);
     }
@@ -73,14 +80,24 @@ export default function FIRPage() {
     setError(null);
     setSuccess(null);
 
+    const coords = [
+      parseFloat(formData.longitude) || 72.5714,
+      parseFloat(formData.latitude) || 23.0225,
+    ];
+
     const payload = {
       fir_number: formData.fir_number,
-      description: `[${formData.crime_type}] [${formData.priority}] - ${formData.location_text} - ${formData.description}`,
+      description: `[${formData.crime_type}] [${formData.priority}] - ${formData.location_text || 'Ahmedabad Sector'} - ${formData.description}`,
+      location_input: {
+        type: 'Point',
+        coordinates: coords,
+      },
       location: {
         type: 'Point',
-        coordinates: [parseFloat(formData.longitude) || 72.5714, parseFloat(formData.latitude) || 23.0225],
+        coordinates: coords,
       },
     };
+
     try {
       const res = await api.post('/api/crimes/fir/', payload);
       setFormData({
@@ -97,20 +114,20 @@ export default function FIRPage() {
       });
       setSuccess('First Information Report successfully registered in the central repository.');
       if (addToast) {
-        addToast('FIR registered successfully with tamper-evident record ID.', 'success');
+        addToast('FIR registered successfully with verified record ID.', 'success');
       }
       fetchFirs();
       if (res.data) {
         setSelectedFir(res.data);
       }
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to submit First Information Report.');
+      setError(extractErrorMessage(err, 'Failed to submit First Information Report.'));
     } finally {
       setSubmitLoading(false);
     }
   };
 
-  const handlePrintFir = (fir) => {
+  const handlePrintFir = () => {
     window.print();
   };
 
@@ -156,13 +173,13 @@ export default function FIRPage() {
   });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-xl)', maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
       {/* Page Header */}
       <div className="page-header">
         <div>
           <h1 className="page-header__title">Central FIR Repository</h1>
           <p className="page-header__subtitle">
-            Official police First Information Report registration, case tagging, and master record ledger
+            First Information Report statutory intake, jurisdictional records management, and printable dossiers
           </p>
         </div>
       </div>
@@ -182,238 +199,246 @@ export default function FIRPage() {
       )}
 
       {/* Main Two-Column Layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '400px 1fr', gap: 'var(--space-md)', alignItems: 'start' }}>
-        {/* Left: FIR Intake Form */}
-        <div className="card">
-          <div className="card-header">
-            <span className="card-title">
-              <PlusIcon size={16} />
-              Register New FIR
-            </span>
+      <div style={{ display: 'grid', gridTemplateColumns: '420px 1fr', gap: 'var(--space-lg)', alignItems: 'start' }}>
+        {/* Left: FIR Intake Form with Grouped Sections */}
+        <div className="card" style={{ padding: '24px', backgroundColor: '#FFFFFF', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}>
+          <div style={{ borderBottom: '1px solid var(--color-border-subtle)', paddingBottom: '12px', marginBottom: '18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <PlusIcon size={16} style={{ color: 'var(--palette-coastal-blue)' }} />
+              <h2 style={{ fontSize: '14px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--palette-charcoal-slate)', margin: 0 }}>
+                Register New FIR
+              </h2>
+            </div>
+            <span className="badge badge--neutral">INTAKE FORM</span>
           </div>
 
-          <form onSubmit={handleSubmit} className="card-body">
-            <div className="form-group">
-              <label className="form-label" htmlFor="fir_number">FIR Reference Number</label>
-              <input
-                id="fir_number"
-                name="fir_number"
-                value={formData.fir_number}
-                onChange={handleChange}
-                className="form-input"
-                required
-                placeholder="e.g. FIR-2026-NVR-042"
-                style={{ fontFamily: 'var(--font-mono)' }}
-              />
-            </div>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Section 1: Incident Information */}
+            <div>
+              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--palette-coastal-blue)', display: 'block', marginBottom: '8px' }}>
+                1. Incident Classification
+              </span>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label" htmlFor="crime_type">Crime Classification</label>
-                <select
-                  id="crime_type"
-                  name="crime_type"
-                  value={formData.crime_type}
-                  onChange={handleChange}
-                  className="form-input"
-                >
-                  <option value="CYBER">Cybercrime</option>
-                  <option value="FINANCIAL">Financial Fraud</option>
-                  <option value="IDENTITY">Identity Theft</option>
-                  <option value="INFRASTRUCTURE">Critical Infrastructure</option>
-                  <option value="THEFT">Physical Theft</option>
-                  <option value="ASSAULT">Assault</option>
-                  <option value="NARCOTICS">Narcotics</option>
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label" htmlFor="priority">Priority Level</label>
-                <select
-                  id="priority"
-                  name="priority"
-                  value={formData.priority}
-                  onChange={handleChange}
-                  className="form-input"
-                >
-                  <option value="LOW">Low</option>
-                  <option value="MEDIUM">Medium</option>
-                  <option value="HIGH">High</option>
-                  <option value="CRITICAL">Critical</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="location_text">Jurisdictional Address / Scene</label>
-              <input
-                id="location_text"
-                name="location_text"
-                value={formData.location_text}
-                onChange={handleChange}
-                className="form-input"
-                required
-                placeholder="e.g. C.G. Road, Navrangpura"
-              />
-            </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label" htmlFor="latitude">Latitude</label>
+              <div className="form-group" style={{ marginBottom: '10px' }}>
+                <label className="form-label" htmlFor="fir_number">FIR Reference Number</label>
                 <input
-                  id="latitude"
-                  name="latitude"
-                  value={formData.latitude}
+                  id="fir_number"
+                  name="fir_number"
+                  value={formData.fir_number}
                   onChange={handleChange}
                   className="form-input"
                   required
+                  placeholder="e.g. FIR-2026-NVR-042"
                   style={{ fontFamily: 'var(--font-mono)' }}
                 />
               </div>
-              <div className="form-group">
-                <label className="form-label" htmlFor="longitude">Longitude</label>
+
+              <div className="form-row" style={{ gap: '8px' }}>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" htmlFor="crime_type">Crime Type</label>
+                  <select
+                    id="crime_type"
+                    name="crime_type"
+                    value={formData.crime_type}
+                    onChange={handleChange}
+                    className="form-input"
+                  >
+                    <option value="CYBER">Cybercrime</option>
+                    <option value="FINANCIAL">Financial Fraud</option>
+                    <option value="IDENTITY">Identity Theft</option>
+                    <option value="INFRASTRUCTURE">Infrastructure</option>
+                    <option value="HARASSMENT">Online Abuse</option>
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" htmlFor="priority">Priority</label>
+                  <select
+                    id="priority"
+                    name="priority"
+                    value={formData.priority}
+                    onChange={handleChange}
+                    className="form-input"
+                  >
+                    <option value="LOW">LOW</option>
+                    <option value="MEDIUM">MEDIUM</option>
+                    <option value="HIGH">HIGH</option>
+                    <option value="CRITICAL">CRITICAL</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 2: Location Information */}
+            <div style={{ paddingTop: '8px', borderTop: '1px solid var(--color-border-subtle)' }}>
+              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--palette-coastal-blue)', display: 'block', marginBottom: '8px' }}>
+                2. Jurisdictional Location
+              </span>
+
+              <div className="form-group" style={{ marginBottom: '10px' }}>
+                <label className="form-label" htmlFor="location_text">Sector / Street Address</label>
                 <input
-                  id="longitude"
-                  name="longitude"
-                  value={formData.longitude}
+                  id="location_text"
+                  name="location_text"
+                  value={formData.location_text}
                   onChange={handleChange}
                   className="form-input"
+                  placeholder="e.g. C.G. Road, Navrangpura"
+                />
+              </div>
+
+              <div className="form-row" style={{ gap: '8px' }}>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" htmlFor="latitude">Latitude</label>
+                  <input
+                    id="latitude"
+                    name="latitude"
+                    value={formData.latitude}
+                    onChange={handleChange}
+                    className="form-input"
+                    placeholder="23.0395"
+                    style={{ fontFamily: 'var(--font-mono)' }}
+                  />
+                </div>
+
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" htmlFor="longitude">Longitude</label>
+                  <input
+                    id="longitude"
+                    name="longitude"
+                    value={formData.longitude}
+                    onChange={handleChange}
+                    className="form-input"
+                    placeholder="72.5571"
+                    style={{ fontFamily: 'var(--font-mono)' }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Section 3: Incident Narrative */}
+            <div style={{ paddingTop: '8px', borderTop: '1px solid var(--color-border-subtle)' }}>
+              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--palette-coastal-blue)', display: 'block', marginBottom: '8px' }}>
+                3. Evidence & Narrative Summary
+              </span>
+
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" htmlFor="description">Statement of Facts</label>
+                <textarea
+                  id="description"
+                  name="description"
+                  value={formData.description}
+                  onChange={handleChange}
+                  className="form-input"
+                  rows={3}
                   required
-                  style={{ fontFamily: 'var(--font-mono)' }}
+                  placeholder="Enter certified operational notes and incident details..."
                 />
               </div>
             </div>
 
-            <div className="form-group">
-              <label className="form-label" htmlFor="description">Incident Narrative / Details</label>
-              <textarea
-                id="description"
-                name="description"
-                value={formData.description}
-                onChange={handleChange}
-                className="form-input"
-                required
-                rows={3}
-                placeholder="Detailed account of offense, complainant statement, and preliminary evidence..."
-              />
-            </div>
-
-            <div style={{ marginTop: 'var(--space-md)' }}>
+            <div style={{ paddingTop: '8px' }}>
               <button
                 type="submit"
                 className="btn btn-primary btn-full"
                 disabled={submitLoading}
+                style={{ height: '42px', fontSize: '13px', fontWeight: '700' }}
               >
-                {submitLoading ? 'Registering Entry...' : 'Officially Register FIR'}
+                {submitLoading ? 'Registering FIR...' : 'Officially Register FIR'}
               </button>
             </div>
           </form>
         </div>
 
-        {/* Right: FIR Registry Ledger */}
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        {/* Right: Master FIR Ledger Records */}
+        <div className="card" style={{ padding: 0, overflow: 'hidden', backgroundColor: '#FFFFFF', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)' }}>
+          {/* Header & Filter Toolbar */}
           <div
             style={{
-              padding: '10px 14px',
+              padding: '16px 20px',
               backgroundColor: 'var(--palette-chalk)',
               borderBottom: '1px solid var(--color-border)',
               display: 'flex',
-              justifyContent: 'space-between',
               alignItems: 'center',
-              gap: '10px',
+              justifyContent: 'space-between',
+              gap: '16px',
             }}
           >
-            <span className="card-title">
-              <FileTextIcon size={16} />
-              Master FIR Ledger ({firs.length})
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <FileTextIcon size={16} style={{ color: 'var(--palette-coastal-blue)' }} />
+              <h3 style={{ fontSize: '13.5px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--palette-charcoal-slate)', margin: 0 }}>
+                Master FIR Ledger ({filteredFirs.length})
+              </h3>
+            </div>
 
-            {/* Search Input */}
-            <div style={{ position: 'relative', width: '220px' }}>
-              <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', display: 'flex' }}>
+            <div style={{ position: 'relative', width: '240px' }}>
+              <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', display: 'flex' }}>
                 <SearchIcon size={13} />
               </span>
               <input
-                type="text"
-                placeholder="Search FIR number, detail..."
+                placeholder="Search FIR number or narrative..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="form-input"
-                style={{ paddingLeft: '26px', height: '28px', fontSize: '11px' }}
+                style={{ paddingLeft: '30px', height: '32px', fontSize: '11.5px' }}
               />
             </div>
           </div>
 
           {loading ? (
-            <div className="loading-spinner">Loading official FIR database...</div>
+            <div className="loading-spinner">Loading FIR repository records...</div>
           ) : filteredFirs.length === 0 ? (
             <div className="empty-state">
-              <div className="empty-state__icon">
-                <FileTextIcon size={24} />
-              </div>
+              <FileTextIcon size={24} className="empty-state__icon" />
               <div className="empty-state__title">No FIR records found</div>
-              <div className="empty-state__text">No matching entries in the database.</div>
+              <div className="empty-state__text">Enter incident details on the left to register a new FIR.</div>
             </div>
           ) : (
-            <div style={{ maxHeight: '580px', overflowY: 'auto' }}>
+            <div className="table-container" style={{ maxHeight: '520px', overflowY: 'auto' }}>
               <table className="data-table">
-                <thead>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
                   <tr>
-                    <th>FIR Number</th>
-                    <th>Description & Tags</th>
-                    <th>GPS Location</th>
-                    <th>Date Registered</th>
+                    <th>FIR Reference</th>
+                    <th>Date / Time</th>
+                    <th>Jurisdiction Coordinates</th>
+                    <th>Narrative Excerpt</th>
                     <th>Status</th>
-                    <th style={{ textAlign: 'right' }}>Action</th>
+                    <th style={{ textAlign: 'right' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredFirs.map((fir) => {
-                    const coords = fir.location?.coordinates;
-                    const dateStr = fir.created_at
-                      ? new Date(fir.created_at).toLocaleDateString()
-                      : '—';
+                    const timeStr = fir.created_at
+                      ? new Date(fir.created_at).toLocaleDateString([], { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+                      : 'Live Log';
 
                     return (
-                      <tr
-                        key={fir.id}
-                        onClick={() => setSelectedFir(fir)}
-                        style={{ cursor: 'pointer', transition: 'background-color var(--transition-fast)' }}
-                      >
-                        <td style={{ fontWeight: '800', color: 'var(--palette-charcoal-slate)', fontFamily: 'var(--font-mono)' }}>
+                      <tr key={fir.id}>
+                        <td style={{ fontWeight: '700', color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>
                           {fir.fir_number}
                         </td>
-                        <td style={{ color: 'var(--color-text-secondary)', maxWidth: '240px' }}>
-                          <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {fir.description}
-                          </div>
+                        <td style={{ color: 'var(--color-text-muted)', fontSize: '11.5px' }}>
+                          {timeStr}
                         </td>
-                        <td style={{ color: 'var(--color-text-muted)', fontSize: '11px', fontFamily: 'var(--font-mono)' }}>
-                          {coords ? (
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                              <LocationPinIcon size={12} style={{ color: 'var(--palette-coastal-blue)' }} />
-                              {coords[1]?.toFixed(3)}, {coords[0]?.toFixed(3)}
-                            </span>
-                          ) : (
-                            '—'
-                          )}
+                        <td style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)', fontSize: '11px' }}>
+                          {fir.location?.coordinates
+                            ? `${fir.location.coordinates[1].toFixed(4)}, ${fir.location.coordinates[0].toFixed(4)}`
+                            : '23.0225, 72.5714'}
                         </td>
-                        <td style={{ color: 'var(--color-text-muted)', fontSize: '12px' }}>
-                          {dateStr}
+                        <td style={{ maxWidth: '240px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {fir.description}
                         </td>
                         <td>
-                          <span className={`badge badge--${getStatusBadge(fir.status)}`}>
-                            {fir.status || 'OPEN'}
+                          <span className={`badge badge--${fir.status === 'RESOLVED' ? 'verified' : 'operational'}`}>
+                            {fir.status || 'ACTIVE'}
                           </span>
                         </td>
                         <td style={{ textAlign: 'right' }}>
                           <button
                             type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedFir(fir);
-                            }}
+                            onClick={() => setSelectedFir(fir)}
                             className="btn btn-secondary btn-xs"
+                            style={{ gap: '4px' }}
                           >
                             <EyeIcon size={11} />
                             <span>Open FIR</span>
@@ -429,237 +454,121 @@ export default function FIRPage() {
         </div>
       </div>
 
-      {/* =========================================================================
-          OFFICIAL FIR REPORT & LEGAL DOSSIER MODAL
-          ========================================================================= */}
+      {/* Official FIR Document Modal */}
       {selectedFir && (
         <div
-          className="modal-overlay"
-          onClick={() => setSelectedFir(null)}
+          className="command-palette-overlay"
+          style={{ zIndex: 1100 }}
           role="dialog"
           aria-modal="true"
           aria-labelledby="fir-modal-title"
+          onClick={() => setSelectedFir(null)}
         >
           <div
-            className="modal-content"
+            className="card"
+            style={{
+              width: '680px',
+              maxWidth: '92vw',
+              padding: '32px',
+              backgroundColor: '#FFFFFF',
+              boxShadow: 'var(--shadow-xl)',
+              borderRadius: 'var(--radius-sm)',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+            }}
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: '780px', width: '94vw', maxHeight: '90vh', overflowY: 'auto', padding: 0 }}
           >
             {/* Modal Header */}
-            <div
-              style={{
-                backgroundColor: 'var(--palette-charcoal-slate)',
-                color: '#FFFFFF',
-                padding: '16px 20px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                borderBottom: '1px solid #222222',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ color: 'var(--palette-burning-flame)' }}>
-                  <ShieldIcon size={20} />
-                </div>
-                <div>
-                  <h2 id="fir-modal-title" style={{ fontSize: '15px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.8px', margin: 0 }}>
-                    Official First Information Report
-                  </h2>
-                  <div style={{ fontSize: '11px', color: '#C9C1B1', fontFamily: 'var(--font-mono)' }}>
-                    GUJARAT POLICE • AHMEDABAD CITY COMMAND HQ
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span className={`badge badge--${getStatusBadge(selectedFir.status)}`}>
-                  {selectedFir.status || 'OPEN'}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid var(--palette-charcoal-slate)', paddingBottom: '16px', marginBottom: '20px' }}>
+              <div>
+                <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--palette-coastal-blue)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                  STATE POLICE DEPARTMENT • AHMEDABAD CITY COMMAND HQ
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setSelectedFir(null)}
-                  className="canvas-close-btn"
-                  style={{ color: '#FFFFFF' }}
-                  aria-label="Close FIR Dossier"
-                >
-                  <XIcon size={16} />
-                </button>
+                <h2 id="fir-modal-title" style={{ fontSize: '18px', fontWeight: '800', color: 'var(--palette-charcoal-slate)', margin: '4px 0 0 0', textTransform: 'uppercase' }}>
+                  First Information Report #{selectedFir.fir_number}
+                </h2>
               </div>
+              <button
+                type="button"
+                onClick={() => setSelectedFir(null)}
+                className="canvas-close-btn"
+                aria-label="Close modal"
+              >
+                <XIcon size={14} />
+              </button>
             </div>
 
-            {/* Modal Body / Official FIR Document Sheet */}
-            <div style={{ padding: '24px' }}>
-              {/* Document Metadata Strip */}
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(4, 1fr)',
-                  gap: '12px',
-                  backgroundColor: 'var(--palette-chalk)',
-                  padding: '14px',
-                  borderRadius: 'var(--radius-xs)',
-                  border: '1px solid var(--color-border)',
-                  marginBottom: '18px',
-                }}
-              >
+            {/* Document Body */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontSize: '13px', lineHeight: 1.6 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', backgroundColor: 'var(--palette-chalk)', padding: '12px 16px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--color-border)' }}>
                 <div>
-                  <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--color-text-muted)', fontWeight: '700', letterSpacing: '0.5px' }}>
-                    FIR Number
-                  </span>
-                  <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--palette-charcoal-slate)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
-                    {selectedFir.fir_number}
+                  <span style={{ fontSize: '10.5px', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: '700' }}>Registration Date:</span>
+                  <div style={{ fontWeight: '600', color: 'var(--color-text-primary)' }}>
+                    {selectedFir.created_at ? new Date(selectedFir.created_at).toLocaleString() : new Date().toLocaleString()}
                   </div>
                 </div>
-
                 <div>
-                  <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--color-text-muted)', fontWeight: '700', letterSpacing: '0.5px' }}>
-                    Registration Date
-                  </span>
-                  <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--color-text-primary)', marginTop: '2px' }}>
-                    {selectedFir.created_at ? new Date(selectedFir.created_at).toLocaleDateString() : 'Active Log'}
+                  <span style={{ fontSize: '10.5px', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: '700' }}>Legal Status:</span>
+                  <div>
+                    <span className="badge badge--operational">{selectedFir.status || 'OPEN / ACTIVE'}</span>
                   </div>
                 </div>
-
                 <div>
-                  <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--color-text-muted)', fontWeight: '700', letterSpacing: '0.5px' }}>
-                    Police Station
-                  </span>
-                  <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--color-text-primary)', marginTop: '2px' }}>
-                    Navrangpura / Central
-                  </div>
+                  <span style={{ fontSize: '10.5px', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: '700' }}>Jurisdiction:</span>
+                  <div style={{ fontWeight: '600', color: 'var(--color-text-primary)' }}>Ahmedabad Metropolitan Region</div>
                 </div>
-
                 <div>
-                  <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--color-text-muted)', fontWeight: '700', letterSpacing: '0.5px' }}>
-                    Evidentiary Act
-                  </span>
-                  <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--palette-coastal-blue)', marginTop: '2px' }}>
-                    Sec 65B Certified
+                  <span style={{ fontSize: '10.5px', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: '700' }}>GPS Coordinates:</span>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11.5px', color: 'var(--color-text-primary)' }}>
+                    {selectedFir.location?.coordinates
+                      ? `${selectedFir.location.coordinates[1]}, ${selectedFir.location.coordinates[0]}`
+                      : '23.0225, 72.5714'}
                   </div>
                 </div>
               </div>
 
-              {/* Crime Narrative & Complainant Statement */}
-              <div style={{ marginBottom: '18px' }}>
-                <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--color-text-secondary)', fontWeight: '800', letterSpacing: '0.6px', display: 'block', marginBottom: '6px' }}>
-                  Incident Description & Narrative Statement
+              <div>
+                <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--palette-charcoal-slate)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '6px' }}>
+                  Statement of Offense & Evidence Narrative:
                 </span>
-                <div
-                  style={{
-                    backgroundColor: '#FFFFFF',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 'var(--radius-xs)',
-                    padding: '14px 16px',
-                    fontSize: '13.5px',
-                    lineHeight: 1.6,
-                    color: 'var(--color-text-primary)',
-                  }}
-                >
+                <div style={{ padding: '12px 16px', backgroundColor: '#FAF7F6', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-xs)', color: 'var(--color-text-primary)', whiteSpace: 'pre-wrap' }}>
                   {selectedFir.description}
                 </div>
               </div>
 
-              {/* Spatial Location & Geolocation */}
-              <div style={{ marginBottom: '18px' }}>
-                <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--color-text-secondary)', fontWeight: '800', letterSpacing: '0.6px', display: 'block', marginBottom: '6px' }}>
-                  Jurisdictional Geolocation Coordinates
-                </span>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '10px 14px',
-                    backgroundColor: 'var(--palette-chalk)',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 'var(--radius-xs)',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontFamily: 'var(--font-mono)', fontSize: '12.5px' }}>
-                    <LocationPinIcon size={16} style={{ color: 'var(--palette-coastal-blue)' }} />
-                    <span>
-                      Latitude:{' '}
-                      <strong>
-                        {selectedFir.location?.coordinates ? selectedFir.location.coordinates[1] : '23.0395'}
-                      </strong>
-                    </span>
-                    <span>•</span>
-                    <span>
-                      Longitude:{' '}
-                      <strong>
-                        {selectedFir.location?.coordinates ? selectedFir.location.coordinates[0] : '72.5571'}
-                      </strong>
-                    </span>
-                  </div>
-                  <span className="badge badge--neutral">SECTOR: AHMEDABAD METRO</span>
-                </div>
+              <div style={{ padding: '10px 14px', border: '1px dashed var(--color-border)', borderRadius: 'var(--radius-xs)', fontSize: '11px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                STATUTORY CERTIFICATION: Electronic certificate generated in accordance with Section 65B of the Indian Evidence Act. SHA-256 Validated.
               </div>
+            </div>
 
-              {/* Statutory Legal Certification Box */}
-              <div
-                style={{
-                  border: '1px solid var(--palette-oatmeal-deep)',
-                  backgroundColor: '#FAF7F6',
-                  padding: '12px 14px',
-                  borderRadius: 'var(--radius-xs)',
-                  fontSize: '11px',
-                  color: 'var(--color-text-secondary)',
-                  lineHeight: 1.45,
-                  marginBottom: '20px',
-                }}
+            {/* Modal Actions */}
+            <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between' }}>
+              <button
+                type="button"
+                onClick={() => handleDownloadDossier(selectedFir)}
+                className="btn btn-secondary"
+                style={{ gap: '6px' }}
               >
-                <div style={{ fontWeight: '800', color: 'var(--palette-charcoal-slate)', marginBottom: '4px', textTransform: 'uppercase' }}>
-                  Statutory Certificate under Section 65B Indian Evidence Act
-                </div>
-                <div>
-                  This is to certify that the computer output containing the First Information Report data was produced by the computer during the period over which the computer was used regularly to store or process information for the purposes of official police record keeping. Cryptographic hash recorded on blockchain immutable store:
-                  <code style={{ display: 'block', marginTop: '4px', fontFamily: 'var(--font-mono)', color: 'var(--palette-coastal-blue)', wordBreak: 'break-all' }}>
-                    SHA-256: 8a4c1f9b3e7d2a0e5b8c1f9a4d7b2e0f6c8a1b3d5e7f9a0b2c4d6e8f0a2b4c6
-                  </code>
-                </div>
-              </div>
-
-              {/* Actions Footer */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--color-border)', paddingTop: '16px' }}>
+                <DownloadIcon size={13} />
+                <span>Download Certified Text</span>
+              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
                 <button
                   type="button"
+                  onClick={handlePrintFir}
                   className="btn btn-secondary"
+                  style={{ gap: '6px' }}
+                >
+                  <PrinterIcon size={13} />
+                  <span>Print Document</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => setSelectedFir(null)}
+                  className="btn btn-primary"
                 >
                   Close
                 </button>
-
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => handleDownloadDossier(selectedFir)}
-                  >
-                    <DownloadIcon size={13} />
-                    <span>Download Dossier</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="btn btn-dark"
-                    onClick={() => handlePrintFir(selectedFir)}
-                  >
-                    <PrinterIcon size={13} />
-                    <span>Print Official FIR</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => {
-                      setSelectedFir(null);
-                      navigate('/station/dispatch', { state: { fir: selectedFir } });
-                    }}
-                  >
-                    <DispatchIcon size={13} />
-                    <span>Dispatch Patrol Unit</span>
-                  </button>
-                </div>
               </div>
             </div>
           </div>

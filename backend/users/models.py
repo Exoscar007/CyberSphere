@@ -27,6 +27,10 @@ class CustomUser(AbstractUser):
     badge_number = models.CharField(max_length=50, blank=True, null=True, unique=True)
     phone_number = models.CharField(max_length=20, blank=True, null=True)
     station = models.ForeignKey(PoliceStation, on_delete=models.SET_NULL, null=True, blank=True, related_name='users')
+    mfa_enabled = models.BooleanField(default=False)
+    mfa_secret = models.CharField(max_length=64, blank=True, null=True)
+    mfa_failed_attempts = models.IntegerField(default=0)
+    mfa_locked_until = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.username} - {self.get_role_display()}"

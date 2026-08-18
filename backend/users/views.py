@@ -3,7 +3,17 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework import status
 from drf_yasg.utils import swagger_auto_schema
-from .serializers import LoginRequestSerializer, LoginResponseSerializer, UserResponseSerializer, UserManagementSerializer, StationPatrolSerializer
+from .serializers import (
+    LoginRequestSerializer,
+    LoginResponseSerializer,
+    UserResponseSerializer,
+    UserManagementSerializer,
+    StationPatrolSerializer,
+    MFAVerifySerializer,
+    MFASetupResponseSerializer,
+    MFAEnableSerializer,
+    MFADisableSerializer,
+)
 from .services import AuthService, UserService
 from .permissions import IsAdminRole
 
@@ -14,9 +24,72 @@ class LoginAPIView(APIView):
     def post(self, request):
         serializer = LoginRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        result = serializer.save()
-        response_serializer = LoginResponseSerializer(result)
-        return Response(response_serializer.data, status=status.HTTP_200_OK)
+        try:
+            result = serializer.save()
+            response_serializer = LoginResponseSerializer(result)
+            return Response(response_serializer.data, status=status.HTTP_200_OK)
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class MFAVerifyAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(request_body=MFAVerifySerializer, responses={200: LoginResponseSerializer})
+    def post(self, request):
+        serializer = MFAVerifySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            result = serializer.save()
+            response_serializer = LoginResponseSerializer(result)
+            return Response(response_serializer.data, status=status.HTTP_200_OK)
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class MFASetupAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(responses={200: MFASetupResponseSerializer})
+    def post(self, request):
+        try:
+            data = AuthService.setup_mfa(request.user)
+            serializer = MFASetupResponseSerializer(data)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class MFAEnableAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(request_body=MFAEnableSerializer)
+    def post(self, request):
+        serializer = MFAEnableSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            result = AuthService.enable_mfa(
+                request.user,
+                serializer.validated_data['secret'],
+                serializer.validated_data['otp_code']
+            )
+            return Response(result, status=status.HTTP_200_OK)
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class MFADisableAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(request_body=MFADisableSerializer)
+    def post(self, request):
+        serializer = MFADisableSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            result = AuthService.disable_mfa(
+                request.user,
+                serializer.validated_data['password'],
+                serializer.validated_data.get('otp_code')
+            )
+            return Response(result, status=status.HTTP_200_OK)
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 class ProfileAPIView(APIView):
     permission_classes = [IsAuthenticated]

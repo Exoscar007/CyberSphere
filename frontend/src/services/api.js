@@ -24,11 +24,17 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      localStorage.removeItem('user');
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
+      const token = localStorage.getItem('accessToken');
+      if (token && !token.startsWith('mock-')) {
+        const url = error.config?.url || '';
+        if (!url.includes('/api/auth/login/') && !url.includes('/api/auth/profile/')) {
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          localStorage.removeItem('user');
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
+          }
+        }
       }
     }
     return Promise.reject(error);
