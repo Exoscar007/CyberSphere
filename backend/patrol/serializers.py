@@ -11,6 +11,7 @@ class PatrolLocationSerializer(serializers.ModelSerializer):
 
 class PatrolAssignmentSerializer(serializers.ModelSerializer):
     officer_username = serializers.CharField(source='officer.username', read_only=True)
+    station_name = serializers.CharField(source='station.name', read_only=True)
     destination = GeoJSONPointField(required=True)
     incident_details = serializers.SerializerMethodField()
     fir_details = serializers.SerializerMethodField()
@@ -18,7 +19,7 @@ class PatrolAssignmentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PatrolAssignment
-        fields = ('id', 'officer', 'officer_username', 'zone_name', 'status', 'priority', 'destination', 'instructions', 'start_time', 'end_time', 'fir', 'fir_details', 'incident', 'incident_details', 'latest_location')
+        fields = ('id', 'officer', 'officer_username', 'station', 'station_name', 'zone_name', 'status', 'priority', 'destination', 'instructions', 'start_time', 'end_time', 'fir', 'fir_details', 'incident', 'incident_details', 'latest_location')
         extra_kwargs = {
             'incident': {'required': True, 'allow_null': False},
             'officer': {'required': True, 'allow_null': False},

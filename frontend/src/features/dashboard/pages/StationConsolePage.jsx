@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../../../services/api';
 import CityCommandCanvas from '../../../components/canvas/CityCommandCanvas';
 import { useToast } from '../../../context/ToastContext';
+import useMonitoringSocket from '../../../hooks/useMonitoringSocket';
 
 export default function StationConsolePage() {
   const { addToast } = useToast();
@@ -37,6 +38,81 @@ export default function StationConsolePage() {
       setTrackLocations([]);
     }
   };
+
+  // Real-Time Station Telemetry Connection (Server-isolated to station precinct)
+  const { status: connectionStatus } = useMonitoringSocket({
+    onIncidentCreated: (newIncident) => {
+      setIncidents((prev) => {
+        const exists = prev.some((i) => i.id === newIncident.id);
+        if (exists) return prev;
+        const updated = [newIncident, ...prev];
+        return updated.sort((a, b) => {
+          const sevWeight = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
+          return (sevWeight[b.severity] || 0) - (sevWeight[a.severity] || 0);
+        });
+      });
+    },
+    onIncidentUpdated: (updatedIncident) => {
+      setIncidents((prev) =>
+        prev.map((i) => (i.id === updatedIncident.id ? { ...i, ...updatedIncident } : i))
+      );
+    },
+    onPatrolLocationUpdated: (patrolPing) => {
+      // 1. Move the unit marker on station map
+      setPatrols((prev) =>
+        prev.map((p) =>
+          Number(p.id) === Number(patrolPing.assignment_id)
+            ? {
+                ...p,
+                latest_location: {
+                  id: patrolPing.id || Date.now(),
+                  location: {
+                    type: 'Point',
+                    coordinates: [patrolPing.longitude, patrolPing.latitude],
+                  },
+                  timestamp: patrolPing.recorded_at || new Date().toISOString(),
+                },
+              }
+            : p
+        )
+      );
+
+      // 2. Update breadcrumbs if tracked
+      if (selectedTrackId && Number(selectedTrackId) === Number(patrolPing.assignment_id)) {
+        setTrackLocations((prev) => [
+          ...prev,
+          {
+            location: {
+              type: 'Point',
+              coordinates: [patrolPing.longitude, patrolPing.latitude],
+            },
+            recorded_at: patrolPing.recorded_at,
+          },
+        ]);
+      }
+    },
+    onCriticalAlert: (alert) => {
+      if (addToast) {
+        addToast(`${alert.title}: ${alert.message}`, 'critical');
+      }
+    },
+  });
+
+  // Background polling for station patrols (10s sync)
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await api.get('/api/patrol/assignments/');
+        if (Array.isArray(res.data)) {
+          setPatrols(res.data);
+        }
+      } catch (e) {
+        console.debug('Station patrol polling error:', e);
+      }
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -105,6 +181,8 @@ export default function StationConsolePage() {
       setStatusFilter={setStatusFilter}
       stationFilter=""
       setStationFilter={() => {}}
+      connectionStatus={connectionStatus}
     />
   );
 }
+

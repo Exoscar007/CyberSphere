@@ -31,7 +31,9 @@ test.describe('City Command HQ Surfaces', () => {
     await expect(modalTitle).toBeVisible();
     await expect(modalTitle).toContainText(/Execute AI Risk Prediction/i);
 
-    await page.click('button:has-text("Cancel")');
+    const cancelBtn = page.locator('.modal button:has-text("Cancel"), button:has-text("Cancel")').first();
+    await expect(cancelBtn).toBeVisible({ timeout: 5000 });
+    await cancelBtn.click();
     await expect(modalTitle).not.toBeVisible();
   });
 

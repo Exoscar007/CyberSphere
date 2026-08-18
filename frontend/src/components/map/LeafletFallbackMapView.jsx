@@ -124,7 +124,6 @@ const searchIcon = L.divIcon({
   iconAnchor: [12, 12],
 });
 
-// Map Controller for Zoom, Pan, Geolocation, and Search flying
 function MapController({
   selectedSearchLoc,
   center,
@@ -136,12 +135,33 @@ function MapController({
   resetTrigger,
 }) {
   const map = useMap();
+  const hasFittedInitialRef = useRef(false);
+
+  // Instantly invalidate size on mount so map tiles and canvas render without blank delay
+  useEffect(() => {
+    map.invalidateSize();
+    const raf = requestAnimationFrame(() => {
+      map.invalidateSize();
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [map]);
+
+  // Center pan on center changes
+  useEffect(() => {
+    if (center && Array.isArray(center) && center.length === 2 && center[0] !== 0 && center[1] !== 0) {
+      if (!hasFittedInitialRef.current) {
+        map.setView(center, zoom || 13, { animate: false });
+      } else {
+        map.panTo(center, { animate: true, duration: 0.35 });
+      }
+    }
+  }, [center, zoom, map]);
 
   // Search flyTo
   useEffect(() => {
     if (selectedSearchLoc) {
       map.flyTo([selectedSearchLoc.lat, selectedSearchLoc.lng], 16, {
-        duration: 1.2,
+        duration: 0.8,
       });
     }
   }, [selectedSearchLoc, map]);
@@ -152,7 +172,7 @@ function MapController({
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           (pos) => {
-            map.flyTo([pos.coords.latitude, pos.coords.longitude], 15, { duration: 1.2 });
+            map.flyTo([pos.coords.latitude, pos.coords.longitude], 15, { duration: 0.8 });
           },
           (err) => console.warn('Geolocation error:', err)
         );
@@ -163,14 +183,15 @@ function MapController({
   // Reset focus trigger
   useEffect(() => {
     if (resetTrigger > 0) {
-      map.flyTo(center || DEFAULT_CENTER, zoom || 12, { duration: 1.0 });
+      map.flyTo(center || DEFAULT_CENTER, zoom || 12, { duration: 0.5 });
     }
   }, [resetTrigger, center, zoom, map]);
 
-  // Auto-fit bounds on initial data load if enabled
+  // Auto-fit bounds ONLY once on initial mount with boundsData
   useEffect(() => {
-    if (autoFit && boundsData && boundsData.length > 0) {
-      map.fitBounds(boundsData, { padding: [40, 40], maxZoom: 15 });
+    if (autoFit && boundsData && boundsData.length > 0 && !hasFittedInitialRef.current) {
+      map.fitBounds(boundsData, { padding: [40, 40], maxZoom: 15, animate: false });
+      hasFittedInitialRef.current = true;
     }
   }, [boundsData, autoFit, map]);
 
@@ -185,6 +206,157 @@ function MapController({
       }
     },
   });
+
+  return null;
+}
+
+// Native Canvas Heatmap Layer for Leaflet (Kernel Density / Gaussian Blur with CyberSphere Palette)
+function LeafletHeatmapOverlay({
+  incidents = [],
+  enabled = true,
+  radius = 30,
+  blur = 18,
+  maxOpacity = 0.72,
+}) {
+  const map = useMap();
+  const canvasRef = useRef(null);
+
+  // Pre-generate 256-color palette lookup table matching CyberSphere institutional scheme
+  const palette = useMemo(() => {
+    if (typeof document === 'undefined') return null;
+    const pCanvas = document.createElement('canvas');
+    pCanvas.width = 256;
+    pCanvas.height = 1;
+    const pCtx = pCanvas.getContext('2d');
+    const grad = pCtx.createLinearGradient(0, 0, 256, 1);
+    // Smooth transition: Low density Teal -> Moderate Coastal Blue -> High Amber -> Critical Terracotta
+    grad.addColorStop(0.0, 'rgba(42, 107, 101, 0)');
+    grad.addColorStop(0.15, 'rgba(42, 107, 101, 0.35)');
+    grad.addColorStop(0.38, 'rgba(40, 85, 112, 0.6)');
+    grad.addColorStop(0.65, 'rgba(217, 122, 38, 0.78)');
+    grad.addColorStop(0.85, 'rgba(163, 81, 57, 0.88)');
+    grad.addColorStop(1.0, 'rgba(140, 45, 30, 0.95)');
+    pCtx.fillStyle = grad;
+    pCtx.fillRect(0, 0, 256, 1);
+    return pCtx.getImageData(0, 0, 256, 1).data;
+  }, []);
+
+  // Pre-generate soft radial brush stamp
+  const circleStamp = useMemo(() => {
+    if (typeof document === 'undefined') return null;
+    const r = radius;
+    const r2 = r + blur;
+    const cCanvas = document.createElement('canvas');
+    cCanvas.width = r2 * 2;
+    cCanvas.height = r2 * 2;
+    const cCtx = cCanvas.getContext('2d');
+    const radGrad = cCtx.createRadialGradient(r2, r2, r * 0.1, r2, r2, r2);
+    radGrad.addColorStop(0, 'rgba(0,0,0,1)');
+    radGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    cCtx.fillStyle = radGrad;
+    cCtx.beginPath();
+    cCtx.arc(r2, r2, r2, 0, Math.PI * 2, true);
+    cCtx.closePath();
+    cCtx.fill();
+    return { canvas: cCanvas, offset: r2 };
+  }, [radius, blur]);
+
+  useEffect(() => {
+    if (!enabled || !map) {
+      if (canvasRef.current && canvasRef.current.parentNode) {
+        canvasRef.current.parentNode.removeChild(canvasRef.current);
+        canvasRef.current = null;
+      }
+      return;
+    }
+
+    let canvas = canvasRef.current;
+    if (!canvas) {
+      canvas = L.DomUtil.create('canvas', 'cyber-heatmap-canvas');
+      canvas.style.position = 'absolute';
+      canvas.style.top = '0';
+      canvas.style.left = '0';
+      canvas.style.pointerEvents = 'none';
+      canvas.style.zIndex = '200';
+      const pane = map.getPanes().overlayPane;
+      pane.appendChild(canvas);
+      canvasRef.current = canvas;
+    }
+
+    const drawHeatmap = () => {
+      if (!canvas || !map || !palette || !circleStamp) return;
+      const size = map.getSize();
+      if (size.x <= 0 || size.y <= 0) return;
+
+      const bounds = map.getBounds();
+      const topLeft = map.latLngToLayerPoint(bounds.getNorthWest());
+
+      canvas.width = size.x;
+      canvas.height = size.y;
+      L.DomUtil.setPosition(canvas, topLeft);
+
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.clearRect(0, 0, size.x, size.y);
+
+      const severityWeights = {
+        CRITICAL: 1.0,
+        HIGH: 0.75,
+        MEDIUM: 0.5,
+        LOW: 0.3,
+      };
+
+      let pointsDrawn = 0;
+      incidents.forEach((inc) => {
+        const coords = inc.location?.coordinates;
+        if (!isValidCoord(coords)) return;
+        const lat = coords[1];
+        const lng = coords[0];
+
+        // Draw if within visible bounds plus buffer
+        if (!bounds.pad(0.15).contains([lat, lng])) return;
+
+        const pt = map.latLngToLayerPoint([lat, lng]);
+        const x = pt.x - topLeft.x;
+        const y = pt.y - topLeft.y;
+
+        const weight = severityWeights[inc.severity] || 0.4;
+        ctx.globalAlpha = Math.min(1.0, weight * 0.7);
+        ctx.drawImage(circleStamp.canvas, x - circleStamp.offset, y - circleStamp.offset);
+        pointsDrawn++;
+      });
+
+      if (pointsDrawn === 0) return;
+
+      const imgData = ctx.getImageData(0, 0, size.x, size.y);
+      const data = imgData.data;
+      const len = data.length;
+
+      for (let i = 0; i < len; i += 4) {
+        const alpha = data[i + 3];
+        if (alpha > 0) {
+          const pIdx = alpha * 4;
+          data[i] = palette[pIdx];
+          data[i + 1] = palette[pIdx + 1];
+          data[i + 2] = palette[pIdx + 2];
+          data[i + 3] = Math.round(palette[pIdx + 3] * maxOpacity);
+        }
+      }
+
+      ctx.putImageData(imgData, 0, 0);
+    };
+
+    drawHeatmap();
+
+    map.on('moveend zoomend resize viewreset', drawHeatmap);
+
+    return () => {
+      map.off('moveend zoomend resize viewreset', drawHeatmap);
+      if (canvas && canvas.parentNode) {
+        canvas.parentNode.removeChild(canvas);
+        canvasRef.current = null;
+      }
+    };
+  }, [map, incidents, enabled, palette, circleStamp, maxOpacity]);
 
   return null;
 }
@@ -206,10 +378,12 @@ export default function LeafletFallbackMapView({
   onSelectRecommendation = null,
   selectedIncident = null,
   patrolAssignments = null,
+  optimizedRoute = null,
   autoFit = true,
 }) {
   const [activeLayerKey, setActiveLayerKey] = useState('google_streets'); // Default to full Google Maps with complete POIs and street details
   const [showLayerMenu, setShowLayerMenu] = useState(false);
+  const [showHeatmap, setShowHeatmap] = useState(true);
   const [searchLocation, setSearchLocation] = useState(null);
   const [locateTrigger, setLocateTrigger] = useState(0);
   const [resetTrigger, setResetTrigger] = useState(0);
@@ -237,6 +411,13 @@ export default function LeafletFallbackMapView({
         points.push([loc.location.coordinates[1], loc.location.coordinates[0]]);
       }
     });
+    if (optimizedRoute?.route_geometry) {
+      optimizedRoute.route_geometry.forEach((pt) => {
+        if (Array.isArray(pt) && pt.length === 2 && pt[0] !== 0 && pt[1] !== 0) {
+          points.push([pt[0], pt[1]]);
+        }
+      });
+    }
     if (selectedIncident && isValidCoord(selectedIncident.location_input?.coordinates)) {
       points.push([
         selectedIncident.location_input.coordinates[1],
@@ -275,9 +456,9 @@ export default function LeafletFallbackMapView({
       <div className="map-floating-controls">
         <button
           type="button"
-          className="map-ctrl-btn"
-          title="Map Layer Switcher"
-          aria-label="Map Layer Switcher"
+          className="map-ctrl-btn map-ctrl-btn--layers"
+          title="Map Layers & Overlays"
+          aria-label="Map Layers & Overlays"
           onClick={() => setShowLayerMenu(!showLayerMenu)}
         >
           <LayersIcon size={14} />
@@ -285,6 +466,7 @@ export default function LeafletFallbackMapView({
 
         {showLayerMenu && (
           <div className="map-layer-menu">
+            <div className="map-layer-menu-header">BASE MAP TILES</div>
             {Object.entries(BASE_LAYERS).map(([key, config]) => (
               <button
                 key={key}
@@ -292,12 +474,30 @@ export default function LeafletFallbackMapView({
                 className={`map-layer-option ${activeLayerKey === key ? 'active' : ''}`}
                 onClick={() => {
                   setActiveLayerKey(key);
-                  setShowLayerMenu(false);
                 }}
               >
                 {config.name}
               </button>
             ))}
+
+            <div className="map-layer-divider" />
+
+            <div className="map-layer-menu-header">OVERLAYS</div>
+            <button
+              type="button"
+              className={`map-layer-toggle-btn ${showHeatmap ? 'active' : ''}`}
+              onClick={() => setShowHeatmap(!showHeatmap)}
+              title="Toggle Continuous Hotspot Density Heatmap"
+            >
+              <span
+                className="map-layer-toggle-dot"
+                style={{ backgroundColor: showHeatmap ? 'var(--color-verified)' : 'var(--color-text-muted)' }}
+              />
+              <span>Density Heatmap</span>
+              <span className={`map-layer-toggle-badge ${showHeatmap ? 'active' : ''}`}>
+                {showHeatmap ? 'ON' : 'OFF'}
+              </span>
+            </button>
           </div>
         )}
 
@@ -330,6 +530,19 @@ export default function LeafletFallbackMapView({
         </button>
       </div>
 
+      {/* Heatmap Density Legend */}
+      {showHeatmap && (
+        <div className="map-heatmap-legend" aria-label="Hotspot Density Legend">
+          <div className="map-heatmap-legend-title">HOTSPOT DENSITY</div>
+          <div className="map-heatmap-gradient-bar" />
+          <div className="map-heatmap-legend-labels">
+            <span>Low</span>
+            <span>Moderate</span>
+            <span>Critical</span>
+          </div>
+        </div>
+      )}
+
       <MapContainer
         center={center}
         zoom={zoom}
@@ -351,93 +564,240 @@ export default function LeafletFallbackMapView({
         <TileLayer
           key={activeLayerKey}
           url={activeLayer.url}
-          subdomains={activeLayer.subdomains || 'abc'}
+          subdomains={activeLayer.subdomains || '0123'}
           attribution={activeLayer.attribution}
           maxZoom={activeLayer.maxZoom}
           maxNativeZoom={activeLayer.maxNativeZoom || 19}
-          keepBuffer={12}
+          keepBuffer={16}
           updateWhenIdle={false}
-          updateWhenZooming={false}
+          updateWhenZooming={true}
+          crossOrigin="anonymous"
         />
 
         {/* Optional Hybrid Overlay Layer */}
         {activeLayer.overlayUrl && (
           <TileLayer
             url={activeLayer.overlayUrl}
-            subdomains={activeLayer.subdomains || 'abc'}
+            subdomains={activeLayer.subdomains || '0123'}
             maxZoom={activeLayer.maxZoom}
             maxNativeZoom={activeLayer.maxNativeZoom || 18}
-            keepBuffer={12}
+            keepBuffer={16}
             updateWhenIdle={false}
-            updateWhenZooming={false}
+            updateWhenZooming={true}
+            crossOrigin="anonymous"
           />
         )}
 
-        {/* 1. Tracked Patrol Route Polyline */}
+        {/* Continuous Hotspot Density Heatmap Overlay */}
+        <LeafletHeatmapOverlay
+          incidents={incidents}
+          enabled={showHeatmap}
+          radius={30}
+          blur={18}
+          maxOpacity={0.72}
+        />
+
+        {/* 1. Tracked Patrol Route Polyline & Historical Breadcrumbs */}
         {selectedTrackId && trackLocations && trackLocations.length > 0 && (
-          <Polyline
-            positions={trackLocations
+          <React.Fragment>
+            <Polyline
+              positions={trackLocations
+                .filter((loc) => isValidCoord(loc.location?.coordinates))
+                .map((loc) => [
+                  loc.location.coordinates[1],
+                  loc.location.coordinates[0],
+                ])}
+              color="#2A6B65"
+              weight={3.5}
+              opacity={0.85}
+              dashArray="4, 6"
+            />
+            {/* Historical GPS breadcrumb waypoint dots */}
+            {trackLocations
               .filter((loc) => isValidCoord(loc.location?.coordinates))
-              .map((loc) => [
-                loc.location.coordinates[1],
-                loc.location.coordinates[0],
-              ])}
-            color="#64766A"
-            weight={3.5}
-            opacity={0.85}
-            dashArray="4, 6"
-          />
+              .map((loc, idx) => (
+                <CircleMarker
+                  key={`breadcrumb-pt-${idx}-${loc.id || idx}`}
+                  center={[loc.location.coordinates[1], loc.location.coordinates[0]]}
+                  radius={3.5}
+                  pathOptions={{
+                    color: '#FFFFFF',
+                    fillColor: '#2A6B65',
+                    fillOpacity: 0.8,
+                    weight: 1.5,
+                  }}
+                >
+                  <Popup>
+                    <div className="cyber-map-popup" style={{ minWidth: '160px' }}>
+                      <div className="cyber-map-popup-header" style={{ color: '#2A6B65' }}>
+                        <span>GPS TRAIL POINT #{idx + 1}</span>
+                      </div>
+                      <div><strong>Ping Time:</strong> {loc.timestamp ? new Date(loc.timestamp).toLocaleTimeString() : 'Recorded'}</div>
+                      <div><strong>Coordinates:</strong> {loc.location.coordinates[1].toFixed(5)}, {loc.location.coordinates[0].toFixed(5)}</div>
+                    </div>
+                  </Popup>
+                </CircleMarker>
+              ))}
+          </React.Fragment>
         )}
 
-        {/* 2. Incident Audit GPS Playback Polyline */}
-        {patrolAssignments &&
-          patrolAssignments.map((assign) => {
-            const path = (assign.locations || [])
-              .filter((loc) => isValidCoord(loc.location?.coordinates))
-              .map((loc) => [
-                loc.location.coordinates[1],
-                loc.location.coordinates[0],
-              ]);
-            return (
-              <Polyline
-                key={assign.id}
-                positions={path}
-                color="#94A7AE"
-                weight={3}
-                opacity={0.8}
-              />
-            );
-          })}
+        {/* 1.5 Optimized Multi-Stop Patrol Route Polyline & Waypoints */}
+        {optimizedRoute && optimizedRoute.route_geometry && optimizedRoute.route_geometry.length > 1 && (
+          <React.Fragment>
+            <Polyline
+              positions={optimizedRoute.route_geometry}
+              color="#285570"
+              weight={4.5}
+              opacity={0.9}
+              dashArray="6, 8"
+            />
 
-        {/* 3. Incidents Overlay */}
-        {incidents.map((incident, idx) => {
-          const coords = incident.location?.coordinates;
+            {/* Starting Officer / Base Marker */}
+            {optimizedRoute.officer?.start_location && (
+              <Marker
+                position={[optimizedRoute.officer.start_location.lat, optimizedRoute.officer.start_location.lng]}
+                icon={L.divIcon({
+                  className: 'cyber-start-waypoint-icon',
+                  html: `<div style="
+                    background-color: #285570;
+                    color: #FFFFFF;
+                    width: 28px;
+                    height: 28px;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 13px;
+                    font-weight: 800;
+                    border: 2px solid #FFFFFF;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.45);
+                  ">🚩</div>`,
+                  iconSize: [28, 28],
+                  iconAnchor: [14, 14],
+                  popupAnchor: [0, -15],
+                })}
+              >
+                <Popup>
+                  <div className="cyber-map-popup">
+                    <div className="cyber-map-popup-header" style={{ color: '#285570' }}>
+                      <span>PATROL ROUTE START POINT</span>
+                    </div>
+                    <div><strong>Unit:</strong> {optimizedRoute.officer.username}</div>
+                    <div><strong>Origin:</strong> {optimizedRoute.officer.start_location.label}</div>
+                  </div>
+                </Popup>
+              </Marker>
+            )}
+
+            {/* Ordered Waypoint Stop Markers */}
+            {optimizedRoute.waypoints && optimizedRoute.waypoints.map((wp) => (
+              <Marker
+                key={`opt-wp-${wp.sequence}-${wp.incident_id}`}
+                position={[wp.lat, wp.lng]}
+                icon={L.divIcon({
+                  className: 'cyber-route-waypoint-icon',
+                  html: `<div style="
+                    background-color: ${wp.severity === 'CRITICAL' ? '#A35139' : wp.severity === 'HIGH' ? '#D97A26' : '#285570'};
+                    color: #FFFFFF;
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 11px;
+                    font-weight: 800;
+                    font-family: var(--font-mono);
+                    border: 2px solid #FFFFFF;
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+                  ">${wp.sequence}</div>`,
+                  iconSize: [24, 24],
+                  iconAnchor: [12, 12],
+                  popupAnchor: [0, -14],
+                })}
+              >
+                <Popup>
+                  <div className="cyber-map-popup">
+                    <div className="cyber-map-popup-header" style={{ color: wp.severity === 'CRITICAL' ? '#A35139' : '#285570' }}>
+                      <span>STOP #{wp.sequence} — INCIDENT #{wp.incident_id}</span>
+                    </div>
+                    <div><strong>Title:</strong> {wp.title}</div>
+                    <div><strong>Severity:</strong> <span className={`badge badge--${wp.severity === 'CRITICAL' ? 'critical' : wp.severity === 'HIGH' ? 'high' : 'operational'}`}>{wp.severity}</span></div>
+                    <div><strong>Leg Distance:</strong> {wp.leg_distance_km} km</div>
+                    <div><strong>Est. Arrival:</strong> +{wp.est_arrival_minutes} min</div>
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+          </React.Fragment>
+        )}
+
+        {/* 2. Candidate GIS Proximity Patrol Units */}
+        {recommendations && recommendations.map((patrol) => {
+          const coords = patrol.current_location?.coordinates;
           if (!isValidCoord(coords)) return null;
-          const lat = coords[1];
-          const lng = coords[0];
-          const color = getSeverityColor(incident.severity);
-          const isCritical = incident.severity === 'CRITICAL';
 
           return (
-            <React.Fragment key={`inc-${incident.id || idx}`}>
-              {/* Radar pulse ring for Critical alerts */}
-              {isCritical && (
+            <CircleMarker
+              key={`rec-patrol-${patrol.patrol_id}`}
+              center={[coords[1], coords[0]]}
+              radius={8}
+              pathOptions={{
+                color: '#285570',
+                fillColor: '#285570',
+                fillOpacity: 0.85,
+                weight: 2,
+              }}
+            >
+              <Popup>
+                <div className="cyber-map-popup">
+                  <div className="cyber-map-popup-header" style={{ color: '#285570' }}>
+                    <span>PROXIMITY CANDIDATE</span>
+                  </div>
+                  <div><strong>Unit:</strong> {patrol.officer_name}</div>
+                  <div><strong>Station:</strong> {patrol.station}</div>
+                  <div><strong>Distance:</strong> {(patrol.distance_meters / 1000).toFixed(2)} km</div>
+                  {onSelectRecommendation && (
+                    <button
+                      type="button"
+                      className="cyber-map-popup-btn"
+                      style={{ background: '#285570' }}
+                      onClick={() => onSelectRecommendation(patrol.patrol_id)}
+                    >
+                      ASSIGN THIS UNIT
+                    </button>
+                  )}
+                </div>
+              </Popup>
+            </CircleMarker>
+          );
+        })}
+
+        {/* 3. Incidents Overlay */}
+        {incidents.map((incident) => {
+          const coords = incident.location?.coordinates || incident.location_input?.coordinates;
+          if (!isValidCoord(coords)) return null;
+
+          const color = getSeverityColor(incident.severity);
+
+          return (
+            <React.Fragment key={`inc-${incident.id}`}>
+              {incident.severity === 'CRITICAL' && (
                 <CircleMarker
-                  center={[lat, lng]}
-                  radius={14}
+                  center={[coords[1], coords[0]]}
+                  radius={18}
                   pathOptions={{
-                    color: '#C85A74',
-                    fillColor: '#C85A74',
-                    fillOpacity: 0.15,
+                    color: color,
+                    fillColor: color,
+                    fillOpacity: 0.22,
                     weight: 1,
-                    dashArray: '3, 4',
                   }}
                 />
               )}
 
               <CircleMarker
-                center={[lat, lng]}
-                radius={isCritical ? 7 : 5.5}
+                center={[coords[1], coords[0]]}
+                radius={8}
                 pathOptions={{
                   color: '#FFFFFF',
                   fillColor: color,
@@ -447,20 +807,14 @@ export default function LeafletFallbackMapView({
               >
                 <Popup>
                   <div className="cyber-map-popup">
-                    <div
-                      className="cyber-map-popup-header"
-                      style={{ color }}
-                    >
-                      <span>{incident.severity} INCIDENT #{incident.id}</span>
+                    <div className="cyber-map-popup-header" style={{ color }}>
+                      <span>INCIDENT #{incident.id} [{incident.severity}]</span>
                     </div>
                     <div><strong>Title:</strong> {incident.title}</div>
                     <div><strong>Status:</strong> {incident.status}</div>
-                    <div>
-                      <strong>Assigned Patrols:</strong>{' '}
-                      {incident.patrol_assignments_count !== undefined
-                        ? incident.patrol_assignments_count
-                        : incident.patrol_assignments?.length || 0}
-                    </div>
+                    <div><strong>Type:</strong> {incident.crime_type || incident.incident_type || 'INCIDENT'}</div>
+                    {incident.station_name && <div><strong>Station:</strong> {incident.station_name}</div>}
+                    <div><strong>Description:</strong> {incident.description?.substring(0, 100)}</div>
                     {onViewAudit && (
                       <button
                         type="button"
@@ -482,6 +836,13 @@ export default function LeafletFallbackMapView({
           const dest = patrol.destination?.coordinates;
           const gps = patrol.latest_location?.location?.coordinates;
           const isTracking = selectedTrackId === patrol.id;
+
+          const pingTime = patrol.latest_location?.timestamp ? new Date(patrol.latest_location.timestamp).getTime() : null;
+          const ageMinutes = pingTime ? Math.max(0, Math.round((Date.now() - pingTime) / 60000)) : null;
+          const isLive = ageMinutes !== null && ageMinutes <= 5;
+          const isStale = ageMinutes !== null && ageMinutes > 5;
+          const statusColor = isLive ? '#2A6B65' : isStale ? '#D97A26' : '#64766A';
+          const statusLabel = isLive ? 'LIVE' : isStale ? `STALE (${ageMinutes}m ago)` : 'OFFLINE / PENDING';
 
           return (
             <React.Fragment key={`patrol-${patrol.id}`}>
@@ -507,58 +868,80 @@ export default function LeafletFallbackMapView({
                       <div><strong>Officer:</strong> {patrol.officer_username}</div>
                       <div><strong>Status:</strong> {patrol.status}</div>
                       <div><strong>Priority:</strong> {patrol.priority}</div>
+                      <div><strong>Sector:</strong> {patrol.zone_name}</div>
+                      {patrol.station_name && <div><strong>Station:</strong> {patrol.station_name}</div>}
                       <div><strong>Instructions:</strong> {patrol.instructions || 'None'}</div>
                     </div>
                   </Popup>
                 </CircleMarker>
               )}
 
-              {/* Live GPS Unit */}
+              {/* Live / Stale GPS Unit */}
               {isValidCoord(gps) ? (
                 <React.Fragment>
                   <CircleMarker
                     center={[gps[1], gps[0]]}
-                    radius={12}
+                    radius={isLive ? 14 : 10}
                     pathOptions={{
-                      color: '#64766A',
-                      fillColor: '#64766A',
-                      fillOpacity: 0.15,
+                      color: statusColor,
+                      fillColor: statusColor,
+                      fillOpacity: isLive ? 0.22 : 0.12,
                       weight: 1,
                     }}
                   />
                   <CircleMarker
                     center={[gps[1], gps[0]]}
-                    radius={6}
+                    radius={6.5}
                     pathOptions={{
                       color: '#FFFFFF',
-                      fillColor: '#64766A',
+                      fillColor: statusColor,
                       fillOpacity: 1,
                       weight: 2,
                     }}
                   >
                     <Popup>
-                      <div className="cyber-map-popup">
-                        <div className="cyber-map-popup-header" style={{ color: '#64766A' }}>
-                          <span>LIVE GPS: P-{String(patrol.id).padStart(3, '0')}</span>
+                      <div className="cyber-map-popup" style={{ minWidth: '200px' }}>
+                        <div className="cyber-map-popup-header" style={{ color: statusColor, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span>PATROL UNIT P-{String(patrol.id).padStart(3, '0')}</span>
+                          <span style={{
+                            fontSize: '9px',
+                            padding: '1px 5px',
+                            borderRadius: '3px',
+                            backgroundColor: isLive ? '#EBF5F3' : '#FEF4E8',
+                            color: statusColor,
+                            fontWeight: '800',
+                          }}>
+                            {statusLabel}
+                          </span>
                         </div>
                         <div><strong>Officer:</strong> {patrol.officer_username}</div>
-                        <div><strong>Status:</strong> {patrol.status}</div>
+                        <div><strong>Assignment:</strong> #{patrol.id} ({patrol.status})</div>
+                        <div><strong>Sector:</strong> {patrol.zone_name}</div>
+                        {patrol.station_name && <div><strong>Station:</strong> {patrol.station_name}</div>}
+                        <div><strong>Priority:</strong> {patrol.priority}</div>
+                        <div><strong>Coordinates:</strong> {gps[1].toFixed(5)}, {gps[0].toFixed(5)}</div>
                         <div>
-                          <strong>Last Ping:</strong>{' '}
+                          <strong>Last Update:</strong>{' '}
                           {patrol.latest_location?.timestamp
-                            ? new Date(patrol.latest_location.timestamp).toLocaleTimeString()
+                            ? `${new Date(patrol.latest_location.timestamp).toLocaleTimeString()} (${ageMinutes === 0 ? 'just now' : `${ageMinutes}m ago`})`
                             : 'N/A'}
                         </div>
+                        {patrol.instructions && (
+                          <div style={{ fontSize: '10.5px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                            <em>{patrol.instructions}</em>
+                          </div>
+                        )}
                         {onTrackPatrol && (
                           <button
                             type="button"
                             className="cyber-map-popup-btn"
                             style={{
-                              background: isTracking ? '#C85A74' : '#64766A',
+                              background: isTracking ? '#A35139' : statusColor,
+                              marginTop: '8px',
                             }}
                             onClick={() => onTrackPatrol(patrol.id)}
                           >
-                            {isTracking ? 'STOP TRACKING' : 'TRACK ROUTE'}
+                            {isTracking ? 'STOP TRACKING' : 'TRACK LIVE ROUTE'}
                           </button>
                         )}
                       </div>
@@ -583,7 +966,9 @@ export default function LeafletFallbackMapView({
                           <span>UNIT: P-{String(patrol.id).padStart(3, '0')}</span>
                         </div>
                         <div><strong>Officer:</strong> {patrol.officer_username}</div>
-                        <div style={{ color: '#C85A74' }}><strong>Status:</strong> GPS PENDING</div>
+                        <div style={{ color: '#A35139' }}><strong>GPS Status:</strong> PENDING / NO PING</div>
+                        <div><strong>Sector:</strong> {patrol.zone_name}</div>
+                        {patrol.station_name && <div><strong>Station:</strong> {patrol.station_name}</div>}
                       </div>
                     </Popup>
                   </CircleMarker>

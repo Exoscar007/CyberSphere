@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import api from '../../../services/api';
 import { useToast } from '../../../context/ToastContext';
 import CyberMap from '../../../components/map/CyberMap';
+import useMonitoringSocket from '../../../hooks/useMonitoringSocket';
 import {
   DispatchIcon,
   ZapIcon,
@@ -32,11 +33,51 @@ function extractErrorMessage(err, defaultMsg) {
   return defaultMsg;
 }
 
+/**
+ * Calculates real-time GPS telemetry health and relative timestamp
+ */
+function getGpsHealth(timestamp) {
+  if (!timestamp) {
+    return {
+      status: 'OFFLINE',
+      label: 'OFFLINE',
+      color: '#A35139',
+      bg: 'rgba(163, 81, 57, 0.12)',
+      badgeClass: 'badge--critical',
+      timeAgo: 'No recent GPS',
+    };
+  }
+  const ageMs = Date.now() - new Date(timestamp).getTime();
+  const ageSec = Math.max(0, Math.floor(ageMs / 1000));
+  const ageMin = Math.floor(ageSec / 60);
+
+  if (ageMin < 5) {
+    const timeAgo = ageSec < 10 ? 'Just now' : ageSec < 60 ? `${ageSec} sec ago` : `${ageMin} min ago`;
+    return {
+      status: 'LIVE',
+      label: 'LIVE',
+      color: '#2A6B65',
+      bg: 'rgba(42, 107, 101, 0.12)',
+      badgeClass: 'badge--operational',
+      timeAgo,
+    };
+  }
+
+  const timeAgo = ageMin < 60 ? `${ageMin} min ago` : `${Math.floor(ageMin / 60)}h ago`;
+  return {
+    status: 'STALE',
+    label: 'STALE',
+    color: '#D97A26',
+    bg: 'rgba(217, 122, 38, 0.12)',
+    badgeClass: 'badge--high',
+    timeAgo,
+  };
+}
+
 export default function PatrolPage() {
   const location = useLocation();
   const { addToast } = useToast();
   const initialIncident = location.state?.incident || null;
-  const initialFIR = location.state?.fir || null;
 
   const [incidents, setIncidents] = useState([]);
   const [selectedIncidentId, setSelectedIncidentId] = useState(initialIncident?.id ? String(initialIncident.id) : '');
@@ -48,6 +89,162 @@ export default function PatrolPage() {
   const [success, setSuccess] = useState(null);
   const [recommendLoading, setRecommendLoading] = useState(false);
   const [recommendations, setRecommendations] = useState(null);
+
+  // Route Optimization State
+  const [optimizedRoute, setOptimizedRoute] = useState(null);
+  const [routeLoading, setRouteLoading] = useState(false);
+  const [maxWaypoints, setMaxWaypoints] = useState(5);
+  const [priorityOnly, setPriorityOnly] = useState(false);
+
+  // Live GPS Tracking & Telemetry State
+  const [selectedTrackId, setSelectedTrackId] = useState(null);
+  const [trackLocations, setTrackLocations] = useState([]);
+  const [pingLoading, setPingLoading] = useState({});
+  const [lastFleetUpdate, setLastFleetUpdate] = useState(() => new Date().toLocaleTimeString());
+  const [, setTick] = useState(0);
+
+  // 5-second local UI timer to keep "X sec ago" fresh
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTick((t) => t + 1);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const fetchAssignments = useCallback(async () => {
+    try {
+      const assRes = await api.get('/api/patrol/assignments/');
+      if (Array.isArray(assRes.data)) {
+        setAssignments(assRes.data);
+        setLastFleetUpdate(new Date().toLocaleTimeString());
+      }
+    } catch (e) {
+      console.debug('Failed to fetch patrol assignments:', e);
+    }
+  }, []);
+
+  // Real-Time WebSocket Telemetry Connection
+  const { status: wsStatus } = useMonitoringSocket({
+    onPatrolLocationUpdated: (patrolPing) => {
+      setLastFleetUpdate(new Date().toLocaleTimeString());
+
+      // 1. Move marker & update assignment latest_location in real-time
+      setAssignments((prev) =>
+        prev.map((a) =>
+          Number(a.id) === Number(patrolPing.assignment_id)
+            ? {
+                ...a,
+                latest_location: {
+                  id: patrolPing.id || Date.now(),
+                  location: {
+                    type: 'Point',
+                    coordinates: [patrolPing.longitude, patrolPing.latitude],
+                  },
+                  timestamp: patrolPing.recorded_at || new Date().toISOString(),
+                },
+              }
+            : a
+        )
+      );
+
+      // 2. If actively tracking this unit, extend breadcrumb trail immediately
+      if (selectedTrackId && Number(selectedTrackId) === Number(patrolPing.assignment_id)) {
+        setTrackLocations((prev) => [
+          ...prev,
+          {
+            id: patrolPing.id || Date.now(),
+            location: {
+              type: 'Point',
+              coordinates: [patrolPing.longitude, patrolPing.latitude],
+            },
+            timestamp: patrolPing.recorded_at || new Date().toISOString(),
+          },
+        ]);
+      }
+    },
+  });
+
+  // Background REST polling fallback (10s sync)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchAssignments();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [fetchAssignments]);
+
+  const handleTrackPatrol = async (id) => {
+    if (selectedTrackId === id) {
+      setSelectedTrackId(null);
+      setTrackLocations([]);
+      return;
+    }
+
+    setSelectedTrackId(id);
+    const targetAssignment = assignments.find((a) => a.id === id);
+    if (targetAssignment?.latest_location?.location?.coordinates) {
+      const coords = targetAssignment.latest_location.location.coordinates;
+      setMapCenter([coords[1], coords[0]]);
+    }
+
+    try {
+      const res = await api.get(`/api/patrol/assignments/${id}/locations/`);
+      setTrackLocations(res.data || []);
+      if (addToast) {
+        addToast(`Live GPS tracking activated for Patrol Unit P-${String(id).padStart(3, '0')}`, 'info');
+      }
+    } catch (err) {
+      console.error('Failed to load GPS trail:', err);
+      setTrackLocations([]);
+    }
+  };
+
+  // Focus map on specific unit
+  const handleFocusUnit = (assignment) => {
+    const coords = assignment.latest_location?.location?.coordinates || assignment.destination?.coordinates;
+    if (coords && coords.length === 2) {
+      setMapCenter([coords[1], coords[0]]);
+    }
+  };
+
+  // Real GPS Ping Transmission
+  const handleSimulatePing = async (assignmentId) => {
+    const assignment = assignments.find((a) => a.id === assignmentId);
+    if (!assignment) return;
+
+    // Use current latest GPS position or destination coordinates as anchor
+    const curGps = assignment.latest_location?.location?.coordinates;
+    const baseCoords = curGps || assignment.destination?.coordinates || [AHMEDABAD_CENTER[1], AHMEDABAD_CENTER[0]];
+    const baseLng = baseCoords[0];
+    const baseLat = baseCoords[1];
+
+    // Realistic ~300-500m movement offset
+    const jitter = () => (Math.random() - 0.5) * 0.007;
+    const lat = parseFloat((baseLat + jitter()).toFixed(6));
+    const lng = parseFloat((baseLng + jitter()).toFixed(6));
+
+    setPingLoading((prev) => ({ ...prev, [assignmentId]: true }));
+    try {
+      const res = await api.post(`/api/patrol/assignments/${assignmentId}/ping/`, { lat, lng });
+
+      // Update local tracking trail if currently tracked
+      if (selectedTrackId === assignmentId) {
+        setTrackLocations((prev) => [...prev, res.data]);
+      }
+
+      // Re-fetch assignments to sync state and update last fleet update timestamp
+      fetchAssignments();
+
+      if (addToast) {
+        addToast(`GPS Ping transmitted for P-${String(assignmentId).padStart(3, '0')} at ${lat.toFixed(4)}, ${lng.toFixed(4)}`, 'success');
+      }
+    } catch (err) {
+      if (addToast) {
+        addToast(`Failed to transmit GPS ping: ${extractErrorMessage(err, 'Server error')}`, 'error');
+      }
+    } finally {
+      setPingLoading((prev) => ({ ...prev, [assignmentId]: false }));
+    }
+  };
 
   const [formData, setFormData] = useState({
     officer: '',
@@ -66,7 +263,6 @@ export default function PatrolPage() {
         const incList = incRes.data || [];
         setIncidents(incList);
 
-        // Pre-select incident and coordinates if provided via routing state
         if (initialIncident) {
           setSelectedIncidentId(String(initialIncident.id));
           const coords = initialIncident.location?.coordinates || initialIncident.location_input?.coordinates;
@@ -78,7 +274,6 @@ export default function PatrolPage() {
             setFormData((prev) => ({ ...prev, priority: initialIncident.severity }));
           }
         } else if (incList.length > 0 && !selectedIncidentId) {
-          // If no initial incident, pre-select first incident for frictionless dispatch
           const firstInc = incList[0];
           setSelectedIncidentId(String(firstInc.id));
           const coords = firstInc.location?.coordinates || firstInc.location_input?.coordinates;
@@ -94,7 +289,6 @@ export default function PatrolPage() {
         const assRes = await api.get('/api/patrol/assignments/');
         setAssignments(assRes.data || []);
 
-        // Fetch Officers: try station-patrols first; fallback to /api/auth/users/ if admin or station not set
         let patrolOfficers = [];
         try {
           const offRes = await api.get('/api/auth/station-patrols/');
@@ -102,7 +296,7 @@ export default function PatrolPage() {
             patrolOfficers = offRes.data;
           }
         } catch (e) {
-          console.warn('Station patrols query returned non-station status. Querying directory.', e);
+          console.warn('Station patrols query error:', e);
         }
 
         if (patrolOfficers.length === 0) {
@@ -119,7 +313,7 @@ export default function PatrolPage() {
                 }));
             }
           } catch (err2) {
-            console.warn('Could not fetch fallback officers directory.', err2);
+            console.warn('Fallback users query error:', err2);
           }
         }
 
@@ -136,13 +330,6 @@ export default function PatrolPage() {
     };
     fetchData();
   }, [initialIncident]);
-
-  const fetchAssignments = async () => {
-    try {
-      const assRes = await api.get('/api/patrol/assignments/');
-      setAssignments(assRes.data || []);
-    } catch {}
-  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -182,6 +369,35 @@ export default function PatrolPage() {
     } finally {
       setRecommendLoading(false);
     }
+  };
+
+  const handleOptimizeRoute = async () => {
+    setRouteLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      if (formData.officer) params.append('officer_id', formData.officer);
+      params.append('max_waypoints', String(maxWaypoints));
+      if (priorityOnly) params.append('priority_only', 'true');
+
+      const res = await api.get(`/api/patrol/optimize-route/?${params.toString()}`);
+      setOptimizedRoute(res.data);
+      if (res.data.waypoints && res.data.waypoints.length > 0) {
+        const firstWp = res.data.waypoints[0];
+        setMapCenter([firstWp.lat, firstWp.lng]);
+        if (addToast) {
+          addToast(`Generated optimized route: ${res.data.waypoints_count} waypoints (${res.data.total_distance_km} km)`, 'success');
+        }
+      }
+    } catch (err) {
+      setError(extractErrorMessage(err, 'Failed to calculate optimized patrol route.'));
+    } finally {
+      setRouteLoading(false);
+    }
+  };
+
+  const handleClearRoute = () => {
+    setOptimizedRoute(null);
   };
 
   const handleSubmit = async (e) => {
@@ -239,13 +455,73 @@ export default function PatrolPage() {
   );
   const selectedIncident = incidents.find((i) => String(i.id) === String(selectedIncidentId));
 
+  // Active units & fleet metrics
+  const activeAssignments = useMemo(
+    () => assignments.filter((a) => ['ASSIGNED', 'ACKNOWLEDGED', 'EN_ROUTE', 'ARRIVED'].includes(a.status)),
+    [assignments]
+  );
+
+  const liveCount = useMemo(
+    () => activeAssignments.filter((a) => getGpsHealth(a.latest_location?.timestamp).status === 'LIVE').length,
+    [activeAssignments]
+  );
+
+  const staleCount = useMemo(
+    () => activeAssignments.filter((a) => getGpsHealth(a.latest_location?.timestamp).status === 'STALE').length,
+    [activeAssignments]
+  );
+
+  const offlineCount = useMemo(
+    () => activeAssignments.filter((a) => getGpsHealth(a.latest_location?.timestamp).status === 'OFFLINE').length,
+    [activeAssignments]
+  );
+
+  const isWsConnected = wsStatus === 'CONNECTED';
+  const trackedAssignment = assignments.find((a) => a.id === selectedTrackId);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-      {/* Page Header */}
-      <div className="page-header">
+      {/* =========================================================================
+          TIER 1: PAGE HEADER WITH LIVE TELEMETRY STATUS PILL
+          ========================================================================= */}
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h1 className="page-header__title">Patrol Fleet Dispatch Console</h1>
-          <p className="page-header__subtitle">Select target incident, review optimal units, and dispatch patrol units with real GIS routing</p>
+          <p className="page-header__subtitle">
+            Real-time GIS dispatch, live telemetry tracking, and multi-stop patrol route optimization
+          </p>
+        </div>
+
+        {/* Top Header Live Telemetry Pill */}
+        <div
+          data-testid="monitoring-connection-pill"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '6px 14px',
+            backgroundColor: '#FFFFFF',
+            border: `1px solid ${isWsConnected ? '#2A6B65' : '#D97A26'}`,
+            borderRadius: 'var(--radius-sm)',
+            boxShadow: 'var(--shadow-sm)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '11px',
+            fontWeight: '800',
+            letterSpacing: '0.4px',
+            color: isWsConnected ? '#2A6B65' : '#D97A26',
+          }}
+        >
+          <span
+            style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              backgroundColor: isWsConnected ? '#2A6B65' : '#D97A26',
+              boxShadow: `0 0 8px ${isWsConnected ? '#2A6B65' : '#D97A26'}`,
+              display: 'inline-block',
+            }}
+          />
+          <span>LIVE TELEMETRY • {isWsConnected ? 'WS CONNECTED' : 'POLLING FALLBACK'}</span>
         </div>
       </div>
 
@@ -262,31 +538,53 @@ export default function PatrolPage() {
         </div>
       )}
 
-      {/* Main Two-Column Dispatch Interface */}
+      {/* =========================================================================
+          TIER 2: TOP OPERATIONS AREA (TACTICAL MAP + DISPATCH CONFIGURATION)
+          ========================================================================= */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-md)' }}>
-        {/* Left: Map Destination Selector */}
-        <div className="card" style={{ padding: 0, overflow: 'hidden', height: '460px', display: 'flex', flexDirection: 'column' }}>
+        {/* Left: Map Destination Selector & Fleet GIS Map */}
+        <div className="card" style={{ padding: 0, overflow: 'hidden', height: '470px', display: 'flex', flexDirection: 'column' }}>
           <div
             style={{
-              padding: '8px 12px',
+              padding: '10px 14px',
               borderBottom: '1px solid var(--color-border)',
               backgroundColor: 'var(--palette-chalk)',
-              fontSize: '10.5px',
-              fontWeight: '700',
+              fontSize: '11px',
+              fontWeight: '800',
               letterSpacing: '0.6px',
               color: 'var(--color-text-primary)',
               textTransform: 'uppercase',
               display: 'flex',
+              justifyContent: 'space-between',
               alignItems: 'center',
-              gap: '5px',
             }}
           >
-            <CompassIcon size={13} />
-            Tactical Map — Target Destination Selector
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <CompassIcon size={14} style={{ color: 'var(--palette-coastal-blue)' }} />
+              <span>Tactical Map — Target & Live Fleet</span>
+            </div>
+            {selectedTrackId && (
+              <span
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  fontSize: '10.5px',
+                  fontWeight: '800',
+                  color: '#2A6B65',
+                  backgroundColor: 'rgba(42, 107, 101, 0.12)',
+                  padding: '2px 8px',
+                  borderRadius: '3px',
+                }}
+              >
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#2A6B65' }} />
+                TRACKING P-{String(selectedTrackId).padStart(3, '0')} ({trackLocations.length} PTS)
+              </span>
+            )}
           </div>
+
           <div style={{ flex: 1, position: 'relative' }}>
             <CyberMap
-              key={mapCenter.join(',')}
               center={mapCenter}
               zoom={13}
               destination={destination}
@@ -297,85 +595,100 @@ export default function PatrolPage() {
                 setRecommendations(null);
               }}
               selectedIncident={selectedIncident}
+              optimizedRoute={optimizedRoute}
+              activePatrols={activeAssignments}
+              selectedTrackId={selectedTrackId}
+              trackLocations={trackLocations}
+              onTrackPatrol={handleTrackPatrol}
               autoFit={true}
             />
           </div>
+
           <div
             style={{
-              padding: '8px 12px',
+              padding: '7px 12px',
               backgroundColor: 'var(--palette-chalk)',
               borderTop: '1px solid var(--color-border)',
-              fontSize: '11px',
+              fontSize: '10.5px',
               color: 'var(--color-text-muted)',
-              fontFamily: 'var(--font-mono)',
               display: 'flex',
+              justifyContent: 'space-between',
               alignItems: 'center',
-              gap: '6px',
+              fontFamily: 'var(--font-mono)',
             }}
           >
-            <LocationPinIcon size={13} style={{ color: 'var(--palette-coastal-blue)' }} />
-            {destination
-              ? `PINNED TARGET: ${destination.lat.toFixed(5)}, ${destination.lng.toFixed(5)}`
-              : 'CLICK MAP TO PIN PATROL DISPATCH DESTINATION'}
+            <span>
+              Target Destination:{' '}
+              {destination ? (
+                <strong style={{ color: 'var(--color-text-primary)' }}>
+                  {destination.lat.toFixed(4)}, {destination.lng.toFixed(4)}
+                </strong>
+              ) : (
+                <span style={{ color: 'var(--color-high)' }}>Click on map to pin target coordinates</span>
+              )}
+            </span>
+            <span>
+              Live Units on Map: <strong style={{ color: '#2A6B65' }}>{activeAssignments.length}</strong>
+            </span>
           </div>
         </div>
 
-        {/* Right: Dispatch Configuration Form */}
-        <div className="card" style={{ height: '460px', overflowY: 'auto', padding: '18px 20px' }}>
-          <div className="card-header" style={{ margin: '-18px -20px 16px -20px', padding: '10px 18px' }}>
-            <span className="card-title">
-              <DispatchIcon size={15} />
+        {/* Right: Dispatch Configuration Card */}
+        <div className="card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--color-border)', paddingBottom: '8px' }}>
+            <h3 style={{ fontSize: '13px', fontWeight: '800', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--color-text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <DispatchIcon size={15} style={{ color: 'var(--palette-coastal-blue)' }} />
               Dispatch Configuration
-            </span>
+            </h3>
+            {selectedIncident && (
+              <span className={`badge badge--${selectedIncident.severity === 'CRITICAL' ? 'critical' : selectedIncident.severity === 'HIGH' ? 'high' : 'operational'}`}>
+                {selectedIncident.severity}
+              </span>
+            )}
           </div>
 
-          <div className="form-group">
+          {/* Incident Selector with Proximity Recommendation */}
+          <div className="form-group" style={{ margin: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-              <label className="form-label" htmlFor="target_inc_select" style={{ margin: 0 }}>Target Incident</label>
-              {selectedIncidentId && (
-                <button
-                  type="button"
-                  onClick={handleRecommend}
-                  disabled={recommendLoading}
-                  className="btn btn-secondary btn-xs"
-                >
-                  <ZapIcon size={11} />
-                  <span>{recommendLoading ? 'Analyzing...' : 'Recommend Patrol'}</span>
-                </button>
-              )}
+              <label className="form-label" htmlFor="incident_select" style={{ margin: 0 }}>
+                Target Incident
+              </label>
+              <button
+                type="button"
+                onClick={handleRecommend}
+                disabled={recommendLoading || !selectedIncidentId}
+                className="btn btn-secondary btn-xs"
+                style={{ fontSize: '10.5px', padding: '2px 8px', gap: '4px' }}
+                title="Calculate nearest available patrol units"
+              >
+                <CompassIcon size={11} />
+                <span>{recommendLoading ? 'Analyzing Proximity...' : 'Recommend Nearest Unit'}</span>
+              </button>
             </div>
             <select
-              id="target_inc_select"
+              id="incident_select"
               className="form-input"
               value={selectedIncidentId}
               onChange={handleIncidentChange}
+              required
             >
-              <option value="">-- Select Incident --</option>
+              <option value="">-- Select Target Incident --</option>
               {incidents.map((inc) => (
                 <option key={inc.id} value={inc.id}>
-                  #{inc.id} - {inc.title} ({inc.severity})
+                  #{inc.id} — {inc.title} [{inc.severity}] ({inc.status})
                 </option>
               ))}
             </select>
           </div>
 
-          {/* AI / GIS Proximity Recommendations */}
+          {/* Proximity Recommendations Deck */}
           {recommendations && (
-            <div
-              style={{
-                marginBottom: 'var(--space-md)',
-                padding: '10px 12px',
-                backgroundColor: 'var(--palette-chalk)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-xs)',
-              }}
-            >
-              <div style={{ fontSize: '10.5px', fontWeight: '700', color: 'var(--palette-coastal-blue)', marginBottom: '6px', letterSpacing: '0.5px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <ZapIcon size={12} />
-                Proximity-Ranked Units (GIS)
+            <div style={{ padding: '10px', backgroundColor: 'var(--palette-chalk)', borderRadius: 'var(--radius-xs)', border: '1px solid var(--color-border)' }}>
+              <div style={{ fontSize: '10.5px', fontWeight: '800', color: 'var(--palette-coastal-blue)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                GIS Proximity Recommendations:
               </div>
               {recommendations.length === 0 ? (
-                <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>No available nearby patrols found in radius.</div>
+                <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>No units within range.</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   {recommendations.map((r) => (
@@ -385,9 +698,9 @@ export default function PatrolPage() {
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
-                        backgroundColor: 'var(--color-surface)',
                         padding: '6px 10px',
-                        borderRadius: 'var(--radius-2xs)',
+                        backgroundColor: '#FFFFFF',
+                        borderRadius: 'var(--radius-xs)',
                         border: '1px solid var(--color-border)',
                       }}
                     >
@@ -416,9 +729,12 @@ export default function PatrolPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {/* Dispatch Submission Form */}
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label" htmlFor="officer_select" style={{ marginBottom: '4px' }}>Patrol Officer / Unit</label>
+              <label className="form-label" htmlFor="officer_select" style={{ marginBottom: '4px' }}>
+                Patrol Officer / Unit
+              </label>
               {officers.length > 0 ? (
                 <select
                   id="officer_select"
@@ -447,7 +763,9 @@ export default function PatrolPage() {
 
             <div className="form-row" style={{ margin: 0, gap: '10px' }}>
               <div className="form-group" style={{ margin: 0 }}>
-                <label className="form-label" htmlFor="zone_name" style={{ marginBottom: '4px' }}>Sector / Zone</label>
+                <label className="form-label" htmlFor="zone_name" style={{ marginBottom: '4px' }}>
+                  Sector / Zone
+                </label>
                 <input
                   id="zone_name"
                   name="zone_name"
@@ -459,7 +777,9 @@ export default function PatrolPage() {
                 />
               </div>
               <div className="form-group" style={{ margin: 0 }}>
-                <label className="form-label" htmlFor="patrol_priority" style={{ marginBottom: '4px' }}>Priority Level</label>
+                <label className="form-label" htmlFor="patrol_priority" style={{ marginBottom: '4px' }}>
+                  Priority Level
+                </label>
                 <select
                   id="patrol_priority"
                   name="priority"
@@ -476,7 +796,9 @@ export default function PatrolPage() {
             </div>
 
             <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label" htmlFor="instructions" style={{ marginBottom: '4px' }}>Tactical Instructions</label>
+              <label className="form-label" htmlFor="instructions" style={{ marginBottom: '4px' }}>
+                Tactical Instructions
+              </label>
               <textarea
                 id="instructions"
                 name="instructions"
@@ -493,7 +815,7 @@ export default function PatrolPage() {
               type="submit"
               className="btn btn-primary btn-full"
               disabled={submitLoading || !selectedIncidentId || !destination || !formData.officer}
-              style={{ marginTop: '6px', height: '38px', fontWeight: '700' }}
+              style={{ marginTop: '4px', height: '36px', fontWeight: '700' }}
             >
               {submitLoading ? 'Dispatching Unit...' : 'Dispatch Patrol Unit'}
             </button>
@@ -501,7 +823,659 @@ export default function PatrolPage() {
         </div>
       </div>
 
-      {/* Selected Incident Information & Active Deployments */}
+      {/* =========================================================================
+          TIER 3: LIVE PATROL FLEET MONITOR & MASTER LEDGER (PROMINENT SECTION)
+          ========================================================================= */}
+      <div
+        className="card"
+        style={{ padding: 0, overflow: 'hidden', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-sm)' }}
+        data-testid="live-patrol-fleet-monitor-card"
+      >
+        {/* Fleet Monitor Card Header */}
+        <div
+          style={{
+            padding: '14px 18px',
+            backgroundColor: 'var(--palette-chalk)',
+            borderBottom: '1px solid var(--color-border)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '12px',
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <RadioWaveIcon size={17} style={{ color: '#2A6B65' }} />
+              <h2 style={{ fontSize: '15px', fontWeight: '800', margin: 0, color: 'var(--color-text-primary)', letterSpacing: '0.4px' }}>
+                LIVE PATROL FLEET MONITOR
+              </h2>
+              <span
+                style={{
+                  fontSize: '9.5px',
+                  fontWeight: '800',
+                  padding: '2px 7px',
+                  borderRadius: '3px',
+                  backgroundColor: isWsConnected ? 'rgba(42, 107, 101, 0.15)' : 'rgba(217, 122, 38, 0.15)',
+                  color: isWsConnected ? '#2A6B65' : '#D97A26',
+                  fontFamily: 'var(--font-mono)',
+                }}
+              >
+                ● {isWsConnected ? 'WEBSOCKET STREAM ACTIVE' : 'POLLING SYNC ACTIVE'}
+              </span>
+            </div>
+            <p style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)', margin: '2px 0 0 0' }}>
+              Real-time GPS telemetry, unit status and patrol movement
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              type="button"
+              onClick={fetchAssignments}
+              className="btn btn-secondary btn-sm"
+              style={{ height: '30px', fontSize: '11px', gap: '4px' }}
+              title="Force sync active patrol fleet"
+            >
+              <CompassIcon size={12} />
+              <span>Sync Fleet</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Compact Operational Telemetry HUD Strip */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+            gap: '10px',
+            padding: '12px 18px',
+            backgroundColor: 'var(--color-surface)',
+            borderBottom: '1px solid var(--color-border)',
+          }}
+        >
+          {/* Telemetry Status */}
+          <div style={{ padding: '8px 12px', backgroundColor: 'var(--palette-chalk)', borderRadius: 'var(--radius-xs)', border: '1px solid var(--color-border)' }}>
+            <div style={{ fontSize: '9.5px', fontWeight: '700', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Live Telemetry
+            </div>
+            <div style={{ fontSize: '13px', fontWeight: '800', color: isWsConnected ? '#2A6B65' : '#D97A26', marginTop: '2px', fontFamily: 'var(--font-mono)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: isWsConnected ? '#2A6B65' : '#D97A26' }} />
+              {isWsConnected ? 'CONNECTED' : 'POLLING'}
+            </div>
+          </div>
+
+          {/* Active Units */}
+          <div style={{ padding: '8px 12px', backgroundColor: 'var(--palette-chalk)', borderRadius: 'var(--radius-xs)', border: '1px solid var(--color-border)' }}>
+            <div style={{ fontSize: '9.5px', fontWeight: '700', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Active Units
+            </div>
+            <div style={{ fontSize: '16px', fontWeight: '800', color: 'var(--color-text-primary)', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
+              {activeAssignments.length} <span style={{ fontSize: '10.5px', color: 'var(--color-text-muted)' }}>deployed</span>
+            </div>
+          </div>
+
+          {/* Live Units */}
+          <div style={{ padding: '8px 12px', backgroundColor: 'var(--palette-chalk)', borderRadius: 'var(--radius-xs)', border: '1px solid var(--color-border)' }}>
+            <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#2A6B65', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Live (&lt;5 min)
+            </div>
+            <div style={{ fontSize: '16px', fontWeight: '800', color: '#2A6B65', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
+              {liveCount}
+            </div>
+          </div>
+
+          {/* Stale Units */}
+          <div style={{ padding: '8px 12px', backgroundColor: 'var(--palette-chalk)', borderRadius: 'var(--radius-xs)', border: '1px solid var(--color-border)' }}>
+            <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#D97A26', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Stale (&gt;5 min)
+            </div>
+            <div style={{ fontSize: '16px', fontWeight: '800', color: '#D97A26', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
+              {staleCount}
+            </div>
+          </div>
+
+          {/* Offline / Pending */}
+          <div style={{ padding: '8px 12px', backgroundColor: 'var(--palette-chalk)', borderRadius: 'var(--radius-xs)', border: '1px solid var(--color-border)' }}>
+            <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#A35139', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Offline / No GPS
+            </div>
+            <div style={{ fontSize: '16px', fontWeight: '800', color: '#A35139', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
+              {offlineCount}
+            </div>
+          </div>
+
+          {/* Last Fleet Update */}
+          <div style={{ padding: '8px 12px', backgroundColor: 'var(--palette-chalk)', borderRadius: 'var(--radius-xs)', border: '1px solid var(--color-border)' }}>
+            <div style={{ fontSize: '9.5px', fontWeight: '700', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Last Fleet Update
+            </div>
+            <div style={{ fontSize: '13px', fontWeight: '800', color: 'var(--palette-charcoal-slate)', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
+              {lastFleetUpdate}
+            </div>
+          </div>
+        </div>
+
+        {/* Active Track Highlight Banner (When a unit is tracked) */}
+        {selectedTrackId && trackedAssignment && (
+          <div
+            style={{
+              padding: '10px 18px',
+              backgroundColor: 'rgba(42, 107, 101, 0.08)',
+              borderBottom: '1px solid var(--color-border)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '10px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '12px',
+                  fontWeight: '800',
+                  color: '#2A6B65',
+                  fontFamily: 'var(--font-mono)',
+                }}
+              >
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#2A6B65' }} />
+                LIVE ROUTE — P-{String(selectedTrackId).padStart(3, '0')} ({trackedAssignment.officer_username})
+              </span>
+              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)' }}>
+                • {trackLocations.length} GPS Pings Recorded
+              </span>
+              {trackedAssignment.latest_location?.location?.coordinates && (
+                <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  • Current: {trackedAssignment.latest_location.location.coordinates[1].toFixed(5)},{' '}
+                  {trackedAssignment.latest_location.location.coordinates[0].toFixed(5)}
+                </span>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => handleSimulatePing(selectedTrackId)}
+                disabled={pingLoading[selectedTrackId]}
+                className="btn btn-xs btn-sage"
+                style={{ fontSize: '11px' }}
+                title="Send GPS coordinate ping to move unit and extend trail"
+              >
+                <RadioWaveIcon size={11} />
+                <span>{pingLoading[selectedTrackId] ? 'Transmitting Ping...' : 'Transmit GPS Ping'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTrackPatrol(selectedTrackId)}
+                className="btn btn-xs btn-danger"
+                style={{ fontSize: '11px' }}
+              >
+                Stop Tracking
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Master Patrol Assignments Ledger Table */}
+        <div style={{ padding: 0 }}>
+          <div
+            style={{
+              padding: '10px 18px',
+              borderBottom: '1px solid var(--color-border)',
+              backgroundColor: 'var(--color-surface)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
+            <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--color-text-primary)', letterSpacing: '0.4px', textTransform: 'uppercase' }}>
+              Master Patrol Assignments Ledger ({assignments.length})
+            </span>
+            <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
+              Click any unit row to focus tactical map
+            </span>
+          </div>
+
+          {loading ? (
+            <div className="loading-spinner" style={{ padding: '30px', textAlign: 'center' }}>
+              Loading live patrol telemetry...
+            </div>
+          ) : assignments.length === 0 ? (
+            <div className="empty-state" style={{ padding: '30px' }}>
+              <div className="empty-state__icon">
+                <DispatchIcon size={28} />
+              </div>
+              <div className="empty-state__title">No active patrol assignments</div>
+              <p style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                Dispatch a patrol unit using the form above to initialize real-time fleet monitoring.
+              </p>
+            </div>
+          ) : (
+            <div className="table-container" style={{ maxHeight: '380px', overflowY: 'auto' }}>
+              <table className="data-table">
+                <thead style={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: 'var(--palette-chalk)' }}>
+                  <tr>
+                    <th style={{ width: '75px' }}>Unit</th>
+                    <th>Officer</th>
+                    <th>Assignment</th>
+                    <th>Station / Sector</th>
+                    <th>Status</th>
+                    <th>Live GPS Position</th>
+                    <th>Last Ping</th>
+                    <th>Health</th>
+                    <th>Tracking</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {assignments.map((a) => {
+                    const isTracking = selectedTrackId === a.id;
+                    const gpsCoords = a.latest_location?.location?.coordinates;
+                    const hasGPS = gpsCoords && gpsCoords.length === 2;
+                    const lastPingTimestamp = a.latest_location?.timestamp;
+                    const health = getGpsHealth(lastPingTimestamp);
+
+                    return (
+                      <tr
+                        key={a.id}
+                        onClick={() => handleFocusUnit(a)}
+                        style={{
+                          backgroundColor: isTracking ? 'rgba(42, 107, 101, 0.08)' : undefined,
+                          cursor: 'pointer',
+                          transition: 'background-color 0.15s ease',
+                        }}
+                        title="Click to focus tactical map on this unit"
+                      >
+                        {/* 1. Unit ID */}
+                        <td>
+                          <span
+                            style={{
+                              fontFamily: 'var(--font-mono)',
+                              fontWeight: '800',
+                              fontSize: '11.5px',
+                              color: isTracking ? '#2A6B65' : 'var(--color-text-primary)',
+                              padding: '2px 6px',
+                              borderRadius: '3px',
+                              backgroundColor: isTracking ? 'rgba(42, 107, 101, 0.15)' : 'var(--palette-chalk)',
+                              border: '1px solid var(--color-border)',
+                              display: 'inline-block',
+                            }}
+                          >
+                            P-{String(a.id).padStart(3, '0')}
+                          </span>
+                        </td>
+
+                        {/* 2. Officer */}
+                        <td style={{ fontWeight: '700', color: 'var(--color-text-primary)' }}>
+                          {a.officer_username || `Officer #${a.officer}`}
+                        </td>
+
+                        {/* 3. Assignment / Incident */}
+                        <td>
+                          <div style={{ fontWeight: '600', color: 'var(--color-text-primary)' }}>
+                            #{a.id}: {a.incident_details?.title || (a.incident ? `Incident #${a.incident}` : 'Routine Patrol')}
+                          </div>
+                          {a.instructions && (
+                            <div style={{ fontSize: '10.5px', color: 'var(--color-text-muted)', maxWidth: '220px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {a.instructions}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* 4. Station / Sector */}
+                        <td style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)' }}>
+                          <div>{a.station_name || 'Navrangpura Base'}</div>
+                          <div style={{ fontSize: '10.5px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                            {a.zone_name || 'Central'}
+                          </div>
+                        </td>
+
+                        {/* 5. Status */}
+                        <td>
+                          <span className={`badge badge--${a.status === 'ARRIVED' ? 'operational' : a.status === 'EN_ROUTE' ? 'high' : 'operational'}`}>
+                            {a.status}
+                          </span>
+                        </td>
+
+                        {/* 6. Live GPS Position */}
+                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: '11px' }}>
+                          {hasGPS ? (
+                            <span style={{ color: health.color, fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <LocationPinIcon size={12} />
+                              {gpsCoords[1].toFixed(5)}, {gpsCoords[0].toFixed(5)}
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>NO GPS PING</span>
+                          )}
+                        </td>
+
+                        {/* 7. Last Ping */}
+                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: '11px' }}>
+                          {lastPingTimestamp ? (
+                            <div>
+                              <strong style={{ color: 'var(--color-text-primary)' }}>{health.timeAgo}</strong>
+                              <div style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>
+                                {new Date(lastPingTimestamp).toLocaleTimeString()}
+                              </div>
+                            </div>
+                          ) : (
+                            <span style={{ color: 'var(--color-text-muted)' }}>—</span>
+                          )}
+                        </td>
+
+                        {/* 8. GPS Health Badge */}
+                        <td>
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '10px',
+                              fontWeight: '800',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              backgroundColor: health.bg,
+                              color: health.color,
+                              fontFamily: 'var(--font-mono)',
+                            }}
+                          >
+                            <span
+                              style={{
+                                width: '6px',
+                                height: '6px',
+                                borderRadius: '50%',
+                                backgroundColor: health.color,
+                                display: 'inline-block',
+                              }}
+                            />
+                            {health.label}
+                          </span>
+                        </td>
+
+                        {/* 9. Tracking Action */}
+                        <td>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleTrackPatrol(a.id);
+                            }}
+                            className={`btn btn-xs ${isTracking ? 'btn-danger' : 'btn-secondary'}`}
+                            style={{ fontSize: '10.5px', fontWeight: '800', padding: '3px 9px', gap: '4px' }}
+                            title={isTracking ? 'Stop tracking this unit' : 'Track live GPS movements and breadcrumb trail'}
+                          >
+                            <CompassIcon size={11} />
+                            <span>{isTracking ? 'TRACKING' : 'TRACK'}</span>
+                          </button>
+                        </td>
+
+                        {/* 10. Actions (Transmit GPS Ping) */}
+                        <td>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSimulatePing(a.id);
+                            }}
+                            disabled={pingLoading[a.id]}
+                            className="btn btn-xs btn-sage"
+                            style={{ fontSize: '10.5px', padding: '3px 8px', gap: '4px' }}
+                            title="Send realistic GPS location ping to update unit coordinates"
+                          >
+                            <RadioWaveIcon size={11} />
+                            <span>{pingLoading[a.id] ? '…' : 'GPS Ping'}</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* =========================================================================
+          TIER 4: PATROL ROUTE OPTIMIZATION (MULTI-STOP AI ROUTE GENERATOR)
+          ========================================================================= */}
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }} data-testid="patrol-route-optimizer-card">
+        <div
+          style={{
+            padding: '14px 18px',
+            backgroundColor: 'var(--palette-chalk)',
+            borderBottom: '1px solid var(--color-border)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '12px',
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <CompassIcon size={16} style={{ color: 'var(--palette-coastal-blue)' }} />
+              <h3 style={{ fontSize: '14px', fontWeight: '800', margin: 0, color: 'var(--color-text-primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Patrol Route Optimization
+              </h3>
+              <span className="badge badge--operational" style={{ fontSize: '10px' }}>
+                AI MULTI-STOP ROUTE
+              </span>
+            </div>
+            <p style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)', margin: '3px 0 0 0' }}>
+              Generate an ordered multi-stop patrol route connecting active sector incidents and high-risk hotspots.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <label htmlFor="route_max_wp" style={{ fontSize: '11px', fontWeight: '600', color: 'var(--color-text-secondary)' }}>
+                Max Stops:
+              </label>
+              <select
+                id="route_max_wp"
+                className="form-input"
+                style={{ width: '88px', height: '32px', fontSize: '11.5px', padding: '0 8px' }}
+                value={maxWaypoints}
+                onChange={(e) => setMaxWaypoints(Number(e.target.value))}
+              >
+                <option value={3}>3 Stops</option>
+                <option value={5}>5 Stops</option>
+                <option value={8}>8 Stops</option>
+                <option value={12}>12 Stops</option>
+              </select>
+            </div>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', fontWeight: '600', color: 'var(--color-text-secondary)', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={priorityOnly}
+                onChange={(e) => setPriorityOnly(e.target.checked)}
+                style={{ accentColor: 'var(--palette-coastal-blue)' }}
+              />
+              High/Critical Only
+            </label>
+
+            {optimizedRoute && (
+              <button
+                type="button"
+                onClick={handleClearRoute}
+                className="btn btn-secondary btn-sm"
+                style={{ height: '32px', fontSize: '11.5px' }}
+              >
+                Clear Route
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handleOptimizeRoute}
+              disabled={routeLoading}
+              className="btn btn-primary btn-sm"
+              style={{ height: '32px', fontSize: '11.5px', fontWeight: '700', gap: '6px' }}
+              data-testid="generate-route-btn"
+            >
+              <ZapIcon size={12} />
+              <span>{routeLoading ? 'Optimizing...' : optimizedRoute ? 'Recalculate Route' : 'Generate Optimized Route'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Route Metrics Summary & Itinerary Table */}
+        {optimizedRoute ? (
+          <div>
+            {/* Top Metrics Row */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: '12px',
+                padding: '14px 18px',
+                backgroundColor: 'var(--color-surface)',
+                borderBottom: '1px solid var(--color-border)',
+              }}
+              data-testid="route-metrics-summary"
+            >
+              <div style={{ padding: '10px 14px', backgroundColor: 'var(--palette-chalk)', borderRadius: 'var(--radius-xs)', border: '1px solid var(--color-border)' }}>
+                <div style={{ fontSize: '10px', fontWeight: '700', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Total Route Distance
+                </div>
+                <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--palette-coastal-blue)', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
+                  {optimizedRoute.total_distance_km} <span style={{ fontSize: '12px' }}>km</span>
+                </div>
+              </div>
+
+              <div style={{ padding: '10px 14px', backgroundColor: 'var(--palette-chalk)', borderRadius: 'var(--radius-xs)', border: '1px solid var(--color-border)' }}>
+                <div style={{ fontSize: '10px', fontWeight: '700', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Est. Travel & Assessment Time
+                </div>
+                <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--palette-charcoal-slate)', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
+                  ~{optimizedRoute.estimated_time_minutes} <span style={{ fontSize: '12px' }}>min</span>
+                </div>
+              </div>
+
+              <div style={{ padding: '10px 14px', backgroundColor: 'var(--palette-chalk)', borderRadius: 'var(--radius-xs)', border: '1px solid var(--color-border)' }}>
+                <div style={{ fontSize: '10px', fontWeight: '700', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Optimal Waypoint Stops
+                </div>
+                <div style={{ fontSize: '18px', fontWeight: '800', color: '#2A6B65', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
+                  {optimizedRoute.waypoints_count} <span style={{ fontSize: '12px' }}>stops</span>
+                </div>
+              </div>
+
+              <div style={{ padding: '10px 14px', backgroundColor: 'var(--palette-chalk)', borderRadius: 'var(--radius-xs)', border: '1px solid var(--color-border)' }}>
+                <div style={{ fontSize: '10px', fontWeight: '700', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Target Patrol Unit
+                </div>
+                <div style={{ fontSize: '13px', fontWeight: '800', color: 'var(--color-text-primary)', marginTop: '3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {optimizedRoute.officer?.username?.toUpperCase() || 'UNIT READY'}
+                </div>
+                <div style={{ fontSize: '10.5px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  {optimizedRoute.officer?.start_location?.label || 'Sector Base'}
+                </div>
+              </div>
+            </div>
+
+            {/* Waypoint Itinerary Table */}
+            <div style={{ padding: '14px 18px' }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--color-text-secondary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Stop-By-Stop Waypoint Sequence
+              </div>
+              {optimizedRoute.waypoints && optimizedRoute.waypoints.length > 0 ? (
+                <div className="table-container" style={{ maxHeight: '280px', overflowY: 'auto' }}>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: '60px' }}>Stop #</th>
+                        <th>Incident</th>
+                        <th>Severity</th>
+                        <th>Coordinates</th>
+                        <th>Leg Distance</th>
+                        <th>Est. Arrival</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {optimizedRoute.waypoints.map((wp) => (
+                        <tr key={`route-row-${wp.sequence}-${wp.incident_id}`}>
+                          <td>
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyCenter: 'center',
+                                width: '24px',
+                                height: '24px',
+                                borderRadius: '50%',
+                                backgroundColor: 'var(--palette-coastal-blue)',
+                                color: '#FFFFFF',
+                                fontWeight: '800',
+                                fontSize: '11px',
+                                fontFamily: 'var(--font-mono)',
+                                textAlign: 'center',
+                                lineHeight: '24px',
+                              }}
+                            >
+                              {wp.sequence}
+                            </span>
+                          </td>
+                          <td style={{ fontWeight: '600', color: 'var(--color-text-primary)' }}>
+                            #{wp.incident_id} — {wp.title}
+                          </td>
+                          <td>
+                            <span className={`badge badge--${wp.severity === 'CRITICAL' ? 'critical' : wp.severity === 'HIGH' ? 'high' : 'operational'}`}>
+                              {wp.severity}
+                            </span>
+                          </td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                            {wp.lat.toFixed(4)}, {wp.lng.toFixed(4)}
+                          </td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontWeight: '700' }}>
+                            {wp.leg_distance_km} km
+                          </td>
+                          <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--palette-coastal-blue)', fontWeight: '700' }}>
+                            +{wp.est_arrival_minutes} min
+                          </td>
+                          <td>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedIncidentId(String(wp.incident_id));
+                                setMapCenter([wp.lat, wp.lng]);
+                                setDestination({ lat: wp.lat, lng: wp.lng });
+                              }}
+                              className="btn btn-secondary btn-xs"
+                              style={{ fontSize: '10.5px' }}
+                            >
+                              Focus Destination
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div style={{ padding: '14px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '11.5px' }}>
+                  {optimizedRoute.message || 'No waypoint stops required.'}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div style={{ padding: '16px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--color-surface)', fontSize: '12px', color: 'var(--color-text-muted)' }}>
+            <span>Click &ldquo;Generate Optimized Route&rdquo; to compute the most efficient multi-stop patrol path for the selected officer.</span>
+          </div>
+        )}
+      </div>
+
+      {/* =========================================================================
+          TIER 5: SELECTED INCIDENT CONTEXT (COLLAPSIBLE / CONTEXTUAL)
+          ========================================================================= */}
       {selectedIncident && (
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           <div
@@ -574,67 +1548,6 @@ export default function PatrolPage() {
           </div>
         </div>
       )}
-
-      {/* All Station Patrol Assignments */}
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--palette-chalk)' }}>
-          <span className="card-title">
-            <RadioWaveIcon size={14} />
-            Master Patrol Assignments Ledger ({assignments.length})
-          </span>
-        </div>
-        {loading ? (
-          <div className="loading-spinner">Loading patrol assignments...</div>
-        ) : assignments.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-state__icon">
-              <DispatchIcon size={24} />
-            </div>
-            <div className="empty-state__title">No active patrol assignments</div>
-          </div>
-        ) : (
-          <div className="table-container" style={{ maxHeight: '280px', overflowY: 'auto' }}>
-            <table className="data-table">
-              <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
-                <tr>
-                  <th>Assignment ID</th>
-                  <th>Officer</th>
-                  <th>Incident</th>
-                  <th>Sector Zone</th>
-                  <th>Priority</th>
-                  <th>Status</th>
-                  <th>Dispatched</th>
-                </tr>
-              </thead>
-              <tbody>
-                {assignments.map((a) => (
-                  <tr key={a.id}>
-                    <td style={{ color: 'var(--color-text-primary)', fontWeight: '700' }}>#{a.id}</td>
-                    <td>{a.officer_username || `Officer #${a.officer}`}</td>
-                    <td>
-                      {a.incident_details?.title
-                        ? `${a.incident_details.title.substring(0, 24)}...`
-                        : `Inc #${a.incident}`}
-                    </td>
-                    <td>{a.zone_name}</td>
-                    <td>
-                      <span className={`badge badge--${a.priority === 'CRITICAL' ? 'critical' : a.priority === 'HIGH' ? 'high' : 'operational'}`}>
-                        {a.priority}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="badge badge--high">{a.status}</span>
-                    </td>
-                    <td style={{ color: 'var(--color-text-muted)' }}>
-                      {a.start_time ? new Date(a.start_time).toLocaleString() : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
     </div>
   );
 }

@@ -60,6 +60,7 @@ export default function GoogleMapView({
   onSelectRecommendation = null,
   selectedIncident = null,
   patrolAssignments = null,
+  optimizedRoute = null,
   autoFit = true,
   onResetKey = null,
   onError = null,
@@ -67,6 +68,7 @@ export default function GoogleMapView({
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const clustererRef = useRef(null);
+  const heatmapLayerRef = useRef(null);
   const markersRef = useRef([]);
   const polylinesRef = useRef([]);
   const circlesRef = useRef([]);
@@ -76,6 +78,7 @@ export default function GoogleMapView({
 
   const [mapType, setMapType] = useState('roadmap');
   const [showLayerMenu, setShowLayerMenu] = useState(false);
+  const [showHeatmap, setShowHeatmap] = useState(true);
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState(null);
 
@@ -126,6 +129,7 @@ export default function GoogleMapView({
             importLibrary('places'),
             importLibrary('geometry'),
             importLibrary('marker'),
+            importLibrary('visualization').catch(() => null),
           ]),
           new Promise((_, reject) =>
             setTimeout(() => reject(new Error('Google Maps network timeout — switching to high-speed GIS')), 1800)
@@ -172,8 +176,11 @@ export default function GoogleMapView({
         setIsLoaded(true);
       } catch (err) {
         if (!isCancelled) {
-          console.error('Google Maps API failed to load:', err);
+          console.warn('Google Maps API failed to load:', err);
           setLoadError(`Google Maps failed to load: ${err.message || err}`);
+          if (typeof onError === 'function') {
+            onError(err.message || err);
+          }
         }
       }
     }
@@ -315,6 +322,62 @@ export default function GoogleMapView({
     circlesRef.current.forEach((c) => c.setMap(null));
     circlesRef.current = [];
 
+    // 0. Render Continuous Hotspot Density Heatmap Layer
+    if (showHeatmap && incidents && incidents.length > 0 && window.google?.maps?.visualization?.HeatmapLayer) {
+      try {
+        const heatmapData = incidents
+          .filter((inc) => isValidCoord(inc.location?.coordinates))
+          .map((inc) => {
+            const coords = inc.location.coordinates;
+            const weight =
+              inc.severity === 'CRITICAL'
+                ? 3.5
+                : inc.severity === 'HIGH'
+                ? 2.5
+                : inc.severity === 'MEDIUM'
+                ? 1.5
+                : 1.0;
+            return {
+              location: new google.maps.LatLng(coords[1], coords[0]),
+              weight,
+            };
+          });
+
+        if (heatmapData.length > 0) {
+          if (!heatmapLayerRef.current) {
+            heatmapLayerRef.current = new google.maps.visualization.HeatmapLayer({
+              data: heatmapData,
+              map,
+              radius: 30,
+              opacity: 0.68,
+              gradient: [
+                'rgba(42, 107, 101, 0)',
+                'rgba(42, 107, 101, 0.4)',
+                'rgba(40, 85, 112, 0.65)',
+                'rgba(217, 122, 38, 0.8)',
+                'rgba(163, 81, 57, 0.9)',
+                'rgba(140, 45, 30, 0.98)',
+              ],
+            });
+          } else {
+            heatmapLayerRef.current.setData(heatmapData);
+            heatmapLayerRef.current.setMap(map);
+          }
+        } else if (heatmapLayerRef.current) {
+          heatmapLayerRef.current.setMap(null);
+        }
+      } catch (heatErr) {
+        console.warn('Google Maps visualization.HeatmapLayer not available:', heatErr);
+        if (heatmapLayerRef.current) {
+          try { heatmapLayerRef.current.setMap(null); } catch (e) { void e; }
+          heatmapLayerRef.current = null;
+        }
+      }
+    } else if (heatmapLayerRef.current) {
+      try { heatmapLayerRef.current.setMap(null); } catch (e) { void e; }
+      heatmapLayerRef.current = null;
+    }
+
     const bounds = new google.maps.LatLngBounds();
     let hasBounds = false;
     const incidentMarkers = [];
@@ -404,19 +467,26 @@ export default function GoogleMapView({
         markersRef.current.push(destMarker);
       }
 
-      // Live GPS Marker
+      // Live / Stale GPS Marker
       if (isValidCoord(gps)) {
         bounds.extend({ lat: gps[1], lng: gps[0] });
         hasBounds = true;
 
+        const pingTime = patrol.latest_location?.timestamp ? new Date(patrol.latest_location.timestamp).getTime() : null;
+        const ageMinutes = pingTime ? Math.max(0, Math.round((Date.now() - pingTime) / 60000)) : null;
+        const isLive = ageMinutes !== null && ageMinutes <= 5;
+        const isStale = ageMinutes !== null && ageMinutes > 5;
+        const statusColor = isLive ? '#2A6B65' : isStale ? '#D97A26' : '#64766A';
+        const statusLabel = isLive ? 'LIVE' : isStale ? `STALE (${ageMinutes}m ago)` : 'OFFLINE / PENDING';
+
         const gpsMarker = new google.maps.Marker({
           position: { lat: gps[1], lng: gps[0] },
           map,
-          title: `Patrol Unit P-${String(patrol.id).padStart(3, '0')} (${patrol.officer_username})`,
+          title: `Patrol Unit P-${String(patrol.id).padStart(3, '0')} (${patrol.officer_username}) [${statusLabel}]`,
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
-            scale: 7,
-            fillColor: '#10b981',
+            scale: isLive ? 8 : 6,
+            fillColor: statusColor,
             fillOpacity: 1,
             strokeColor: '#ffffff',
             strokeWeight: 2,
@@ -425,14 +495,21 @@ export default function GoogleMapView({
 
         gpsMarker.addListener('click', () => {
           const content = `
-            <div style="font-family: monospace; font-size: 11px; color: #0f172a; min-width: 180px;">
-              <strong style="color: #10b981; font-size: 12px;">LIVE GPS: P-${String(patrol.id).padStart(3, '0')}</strong><br/>
+            <div style="font-family: monospace; font-size: 11px; color: #0f172a; min-width: 200px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 6px;">
+                <strong style="color: ${statusColor}; font-size: 12px;">UNIT P-${String(patrol.id).padStart(3, '0')}</strong>
+                <span style="font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 3px; background: ${isLive ? '#EBF5F3' : '#FEF4E8'}; color: ${statusColor};">${statusLabel}</span>
+              </div>
               <strong>Officer:</strong> ${patrol.officer_username}<br/>
-              <strong>Status:</strong> ${patrol.status}<br/>
-              <strong>Last Ping:</strong> ${patrol.latest_location?.timestamp ? new Date(patrol.latest_location.timestamp).toLocaleTimeString() : 'N/A'}<br/>
+              <strong>Assignment:</strong> #${patrol.id} (${patrol.status})<br/>
+              <strong>Sector:</strong> ${patrol.zone_name || 'Central'}<br/>
+              ${patrol.station_name ? `<strong>Station:</strong> ${patrol.station_name}<br/>` : ''}
+              <strong>Priority:</strong> ${patrol.priority}<br/>
+              <strong>Coordinates:</strong> ${gps[1].toFixed(5)}, ${gps[0].toFixed(5)}<br/>
+              <strong>Last Update:</strong> ${patrol.latest_location?.timestamp ? `${new Date(patrol.latest_location.timestamp).toLocaleTimeString()} (${ageMinutes === 0 ? 'just now' : `${ageMinutes}m ago`})` : 'N/A'}<br/>
               <div style="margin-top: 8px;">
-                <button id="btn-track-${patrol.id}" style="background: ${isTracking ? '#ef4444' : '#10b981'}; border: none; color: white; padding: 4px 8px; font-size: 10px; cursor: pointer; width: 100%; border-radius: 2px; font-weight: bold;">
-                  ${isTracking ? 'STOP TRACKING' : 'TRACK ROUTE'}
+                <button id="btn-track-${patrol.id}" style="background: ${isTracking ? '#A35139' : statusColor}; border: none; color: white; padding: 5px 8px; font-size: 10.5px; cursor: pointer; width: 100%; border-radius: 3px; font-weight: bold;">
+                  ${isTracking ? 'STOP TRACKING' : 'TRACK LIVE ROUTE'}
                 </button>
               </div>
             </div>
@@ -465,8 +542,8 @@ export default function GoogleMapView({
         const polyline = new google.maps.Polyline({
           path: pathCoords,
           geodesic: true,
-          strokeColor: '#10b981',
-          strokeOpacity: 0.95,
+          strokeColor: '#2A6B65',
+          strokeOpacity: 0.9,
           strokeWeight: 4,
           map,
         });
@@ -496,6 +573,64 @@ export default function GoogleMapView({
           polylinesRef.current.push(polyline);
         }
       });
+    }
+
+    // 4.5 Optimized Patrol Route Polyline & Waypoints
+    if (optimizedRoute && optimizedRoute.route_geometry && optimizedRoute.route_geometry.length > 1) {
+      const pathCoords = optimizedRoute.route_geometry.map((pt) => ({
+        lat: pt[0],
+        lng: pt[1],
+      }));
+
+      pathCoords.forEach((pt) => {
+        bounds.extend(pt);
+        hasBounds = true;
+      });
+
+      const routePolyline = new google.maps.Polyline({
+        path: pathCoords,
+        geodesic: true,
+        strokeColor: '#285570',
+        strokeOpacity: 0.9,
+        strokeWeight: 4,
+        map,
+      });
+      polylinesRef.current.push(routePolyline);
+
+      // Start pin
+      if (optimizedRoute.officer?.start_location) {
+        const startPin = new google.maps.Marker({
+          position: {
+            lat: optimizedRoute.officer.start_location.lat,
+            lng: optimizedRoute.officer.start_location.lng,
+          },
+          map,
+          title: `Start: ${optimizedRoute.officer.start_location.label}`,
+          label: {
+            text: 'S',
+            color: '#ffffff',
+            fontWeight: 'bold',
+          },
+        });
+        markersRef.current.push(startPin);
+      }
+
+      // Waypoints pins
+      if (optimizedRoute.waypoints) {
+        optimizedRoute.waypoints.forEach((wp) => {
+          const wpMarker = new google.maps.Marker({
+            position: { lat: wp.lat, lng: wp.lng },
+            map,
+            title: `Stop #${wp.sequence}: ${wp.title}`,
+            label: {
+              text: String(wp.sequence),
+              color: '#ffffff',
+              fontWeight: 'bold',
+            },
+          });
+          markersRef.current.push(wpMarker);
+        });
+      }
     }
 
     // 5. Selected Incident Pin (PatrolPage / IncidentAuditPage)
@@ -611,6 +746,7 @@ export default function GoogleMapView({
     }
   }, [
     isLoaded,
+    showHeatmap,
     incidents,
     activePatrols,
     selectedTrackId,
@@ -649,9 +785,9 @@ export default function GoogleMapView({
         <div className="map-floating-controls">
           <button
             type="button"
-            className="map-ctrl-btn"
-            title="Map Type / Layers"
-            aria-label="Map Type / Layers"
+            className="map-ctrl-btn map-ctrl-btn--layers"
+            title="Map Layers & Overlays"
+            aria-label="Map Layers & Overlays"
             onClick={() => setShowLayerMenu(!showLayerMenu)}
           >
             <LayersIcon size={14} />
@@ -659,6 +795,7 @@ export default function GoogleMapView({
 
           {showLayerMenu && (
             <div className="map-layer-menu">
+              <div className="map-layer-menu-header">BASE MAP TILES</div>
               <button
                 type="button"
                 className={`map-layer-option ${mapType === 'roadmap' ? 'active' : ''}`}
@@ -687,6 +824,25 @@ export default function GoogleMapView({
               >
                 Terrain
               </button>
+
+              <div className="map-layer-divider" />
+
+              <div className="map-layer-menu-header">OVERLAYS</div>
+              <button
+                type="button"
+                className={`map-layer-toggle-btn ${showHeatmap ? 'active' : ''}`}
+                onClick={() => setShowHeatmap(!showHeatmap)}
+                title="Toggle Continuous Hotspot Density Heatmap"
+              >
+                <span
+                  className="map-layer-toggle-dot"
+                  style={{ backgroundColor: showHeatmap ? 'var(--color-verified)' : 'var(--color-text-muted)' }}
+                />
+                <span>Density Heatmap</span>
+                <span className={`map-layer-toggle-badge ${showHeatmap ? 'active' : ''}`}>
+                  {showHeatmap ? 'ON' : 'OFF'}
+                </span>
+              </button>
             </div>
           )}
 
@@ -710,6 +866,19 @@ export default function GoogleMapView({
               <LockIcon size={14} />
             </button>
           )}
+        </div>
+      )}
+
+      {/* Heatmap Density Legend */}
+      {showHeatmap && (
+        <div className="map-heatmap-legend" aria-label="Hotspot Density Legend">
+          <div className="map-heatmap-legend-title">HOTSPOT DENSITY</div>
+          <div className="map-heatmap-gradient-bar" />
+          <div className="map-heatmap-legend-labels">
+            <span>Low</span>
+            <span>Moderate</span>
+            <span>Critical</span>
+          </div>
         </div>
       )}
 

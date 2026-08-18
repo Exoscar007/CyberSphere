@@ -36,3 +36,26 @@ build/
 .env.*
 **/.env
 **/.env.*
+
+# Test evidence uploads
+backend/evidence/*.jpg
+
+# AI/tool generated files
+.agent/
+.agents/
+.codex/
+.impeccable/
+
+# Playwright test output
+frontend/playwright-report/
+frontend/test-results/
+
+# AI/tool generated files
+.agent/
+.agents/
+.codex/
+.impeccable/
+
+# Playwright test output
+frontend/playwright-report/
+frontend/test-results/

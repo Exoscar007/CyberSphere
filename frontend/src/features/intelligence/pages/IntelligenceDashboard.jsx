@@ -217,21 +217,71 @@ export default function IntelligenceDashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 'var(--space-md)', alignItems: 'start' }}>
         <div>
           {/* FILTER PILLS */}
-          <div className="filter-pills-bar" style={{ marginBottom: 'var(--space-md)' }}>
-            <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginRight: '4px' }}>
-              Risk Level:
-            </span>
-            {['ALL', 'Critical', 'High', 'Medium', 'Low'].map((level) => (
-              <button
-                key={level}
-                type="button"
-                className={`filter-pill ${filterRisk === level ? 'filter-pill--active' : ''}`}
-                onClick={() => setFilterRisk(level)}
-              >
-                {level}
-              </button>
-            ))}
-          </div>
+          {(() => {
+            const RISK_CONFIG = {
+              ALL:      { color: 'var(--palette-charcoal-slate)',      bg: 'var(--palette-oatmeal)',         border: 'var(--color-border)',           activeBg: 'var(--palette-charcoal-slate)', activeColor: '#fff', dot: null },
+              Critical: { color: 'var(--color-critical)',              bg: 'var(--color-critical-bg)',       border: 'var(--color-critical-border)',   activeBg: 'var(--color-critical)',         activeColor: '#fff', dot: 'var(--color-critical)' },
+              High:     { color: 'var(--color-high)',                  bg: 'var(--color-high-bg)',           border: 'var(--color-high-border)',       activeBg: 'var(--color-high)',             activeColor: '#fff', dot: 'var(--color-high)' },
+              Medium:   { color: 'var(--palette-coastal-blue)',        bg: 'var(--color-operational-bg)',   border: 'var(--color-operational-border)', activeBg: 'var(--palette-coastal-blue)',   activeColor: '#fff', dot: 'var(--palette-coastal-blue)' },
+              Low:      { color: 'var(--color-verified)',              bg: 'var(--color-verified-bg)',       border: 'var(--color-verified-border)',   activeBg: 'var(--color-verified)',         activeColor: '#fff', dot: 'var(--color-verified)' },
+            };
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: 'var(--space-md)', flexWrap: 'wrap' }}>
+                <span style={{
+                  fontSize: '10px',
+                  fontWeight: '700',
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--color-text-muted)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.8px',
+                  marginRight: '4px',
+                  whiteSpace: 'nowrap',
+                }}>
+                  RISK LEVEL
+                </span>
+                {['ALL', 'Critical', 'High', 'Medium', 'Low'].map((level) => {
+                  const cfg = RISK_CONFIG[level];
+                  const isActive = filterRisk === level;
+                  return (
+                    <button
+                      key={level}
+                      type="button"
+                      onClick={() => setFilterRisk(level)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        padding: '4px 11px',
+                        borderRadius: 'var(--radius-full)',
+                        border: `1px solid ${isActive ? cfg.activeBg : cfg.border}`,
+                        backgroundColor: isActive ? cfg.activeBg : cfg.bg,
+                        color: isActive ? cfg.activeColor : cfg.color,
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        letterSpacing: '0.4px',
+                        cursor: 'pointer',
+                        transition: 'all var(--transition-fast)',
+                        boxShadow: isActive ? 'var(--shadow-xs)' : 'none',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {cfg.dot && (
+                        <span style={{
+                          width: '6px',
+                          height: '6px',
+                          borderRadius: '50%',
+                          backgroundColor: isActive ? 'rgba(255,255,255,0.85)' : cfg.dot,
+                          flexShrink: 0,
+                        }} />
+                      )}
+                      {level}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           {/* Map Container */}
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>

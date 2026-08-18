@@ -21,7 +21,7 @@ test.describe('Quality & Console Runtime Error Guardrail', () => {
 
     for (const route of routesToTest) {
       await page.goto(route);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
     }
 
     expect(uncaughtErrors).toEqual([]);

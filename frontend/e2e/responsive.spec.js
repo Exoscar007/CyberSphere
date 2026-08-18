@@ -10,7 +10,7 @@ test.describe('Responsive Layouts', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/city/overview');
     await expect(page.locator('.command-canvas-map-container')).toBeVisible();
-    await expect(page.locator('.canvas-hud-search')).toBeVisible();
+    await expect(page.locator('.header-command-trigger')).toBeVisible();
     await expect(page.locator('.canvas-hud-status')).toBeVisible();
   });
 
@@ -18,14 +18,14 @@ test.describe('Responsive Layouts', () => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto('/city/overview');
     await expect(page.locator('.command-canvas-map-container')).toBeVisible();
-    await expect(page.locator('.canvas-hud-search')).toBeVisible();
+    await expect(page.locator('.header-command-trigger')).toBeVisible();
   });
 
   test('RESP-03: 1024px Compact laptop layout', async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 768 });
     await page.goto('/city/overview');
     await expect(page.locator('.command-canvas-map-container')).toBeVisible();
-    await expect(page.locator('.canvas-hud-search')).toBeVisible();
+    await expect(page.locator('.header-command-trigger')).toBeVisible();
   });
 
   test('RESP-04: 768px Tablet layout', async ({ page }) => {

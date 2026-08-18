@@ -13,6 +13,31 @@ import './CyberMap.css';
  *   INSTANTLY and seamlessly falls back to high-performance Leaflet engine (LeafletFallbackMapView)
  *   so the operational command center never gets interrupted.
  */
+class GoogleMapErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, info) {
+    console.warn('[CyberMap] Google Maps runtime error intercepted by boundary, seamlessly engaging Leaflet fallback:', error, info);
+    if (this.props.onError) {
+      this.props.onError(error.message || String(error));
+    }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <LeafletFallbackMapView {...this.props.fallbackProps} />;
+    }
+    return this.props.children;
+  }
+}
+
 export default function CyberMap(props) {
   const [authFailed, setAuthFailed] = useState(false);
   const [apiKey, setApiKey] = useState(() => {
@@ -54,12 +79,14 @@ export default function CyberMap(props) {
   // If key is present and has not encountered an authentication/load failure, try GoogleMapView
   if (apiKey && apiKey.length > 0 && !authFailed) {
     return (
-      <GoogleMapView
-        apiKey={apiKey}
-        onResetKey={handleResetKey}
-        onError={handleGoogleMapError}
-        {...props}
-      />
+      <GoogleMapErrorBoundary onError={handleGoogleMapError} fallbackProps={props}>
+        <GoogleMapView
+          apiKey={apiKey}
+          onResetKey={handleResetKey}
+          onError={handleGoogleMapError}
+          {...props}
+        />
+      </GoogleMapErrorBoundary>
     );
   }
 

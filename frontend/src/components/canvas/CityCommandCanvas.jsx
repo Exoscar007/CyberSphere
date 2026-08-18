@@ -5,7 +5,6 @@ import CommandPalette from '../common/CommandPalette';
 import DetailDrawer from '../dynamic/DetailDrawer';
 import FilterPopover from '../dashboard/FilterPopover';
 import {
-  SearchIcon,
   DispatchIcon,
   XIcon,
   EyeIcon,
@@ -34,6 +33,7 @@ export default function CityCommandCanvas({
   stationFilter,
   setStationFilter,
   stations = [],
+  connectionStatus = 'CONNECTED',
 }) {
   const navigate = useNavigate();
 
@@ -112,48 +112,8 @@ export default function CityCommandCanvas({
           pointerEvents: 'none',
         }}
       >
-        {/* Left: Command Search Pill */}
-        <div
-          className="canvas-hud-search"
-          onClick={() => setPaletteOpen(true)}
-          role="button"
-          tabIndex={0}
-          title="Command Search & Navigation (Ctrl + K)"
-          style={{
-            pointerEvents: 'auto',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            backgroundColor: '#FFFFFF',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '6px 14px',
-            boxShadow: 'var(--shadow-sm)',
-            cursor: 'pointer',
-            minWidth: '280px',
-          }}
-        >
-          <span style={{ color: 'var(--palette-coastal-blue)', display: 'flex' }}>
-            <SearchIcon size={14} />
-          </span>
-          <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', flex: 1 }}>
-            Search command, incident, sector...
-          </span>
-          <kbd
-            style={{
-              fontSize: '10px',
-              fontWeight: '700',
-              fontFamily: 'var(--font-mono)',
-              backgroundColor: 'var(--palette-chalk)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-2xs)',
-              padding: '2px 5px',
-              color: 'var(--color-text-secondary)',
-            }}
-          >
-            Ctrl K
-          </kbd>
-        </div>
+        {/* Left: spacer — search is in the top app header */}
+        <div style={{ flex: '0 0 auto' }} />
 
         {/* Center: Clean Metric Chips */}
         <div
@@ -213,20 +173,62 @@ export default function CityCommandCanvas({
             </span>
           </div>
 
-          <span style={{ width: '1px', height: '14px', backgroundColor: 'var(--color-border)' }} />
+            <span style={{ width: '1px', height: '14px', backgroundColor: 'var(--color-border)' }} />
 
-          <div
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 8px', cursor: 'pointer' }}
-            onClick={() => setShowAnalyticsModal(true)}
-          >
-            <span style={{ fontSize: '11px', color: 'var(--color-verified)', fontWeight: '600' }}>Ready:</span>
-            <span style={{ fontSize: '12px', fontWeight: '800', fontFamily: 'var(--font-mono)', color: 'var(--color-verified)' }}>
-              {safetyScore}%
-            </span>
+            <div
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 8px', cursor: 'pointer' }}
+              onClick={() => setShowAnalyticsModal(true)}
+            >
+              <span style={{ fontSize: '11px', color: 'var(--color-verified)', fontWeight: '600' }}>Ready:</span>
+              <span style={{ fontSize: '12px', fontWeight: '800', fontFamily: 'var(--font-mono)', color: 'var(--color-verified)' }}>
+                {safetyScore}%
+              </span>
+            </div>
+
+            <span style={{ width: '1px', height: '14px', backgroundColor: 'var(--color-border)' }} />
+
+            {/* Real-Time WebSocket Connection Indicator */}
+            <div
+              data-testid="monitoring-connection-pill"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '2px 8px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '11px',
+                fontWeight: '700',
+                color:
+                  connectionStatus === 'CONNECTED'
+                    ? 'var(--color-verified)'
+                    : connectionStatus === 'RECONNECTING'
+                    ? '#D97706'
+                    : 'var(--color-text-muted)',
+              }}
+              title={`Real-Time Telemetry Stream: ${connectionStatus}`}
+            >
+              <span
+                style={{
+                  width: '7px',
+                  height: '7px',
+                  borderRadius: '50%',
+                  backgroundColor:
+                    connectionStatus === 'CONNECTED'
+                      ? 'var(--color-verified)'
+                      : connectionStatus === 'RECONNECTING'
+                      ? '#D97706'
+                      : '#9CA3AF',
+                  boxShadow:
+                    connectionStatus === 'CONNECTED'
+                      ? '0 0 6px rgba(16, 185, 129, 0.6)'
+                      : 'none',
+                }}
+              />
+              <span>{connectionStatus === 'CONNECTED' ? 'LIVE' : connectionStatus}</span>
+            </div>
           </div>
-        </div>
 
-        {/* Right: Operational Filter Drawer Trigger & Intelligence Rail Button */}
+          {/* Right: Operational Filter Drawer Trigger & Intelligence Rail Button */}
         <div style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <FilterPopover
             timeFilter={timeFilter}

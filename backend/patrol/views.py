@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 from .serializers import PatrolAssignmentSerializer, PatrolAssignmentUpdateSerializer, PatrolLocationInputSerializer, PatrolLocationSerializer
 from .services import PatrolService
 from .repository import PatrolRepository
@@ -115,3 +116,46 @@ class PatrolLocationPingAPIView(APIView):
             except ValueError as e:
                 return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class PatrolRouteOptimizationAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        manual_parameters=[
+            openapi.Parameter('officer_id', openapi.IN_QUERY, description="Target Officer ID", type=openapi.TYPE_INTEGER),
+            openapi.Parameter('max_waypoints', openapi.IN_QUERY, description="Maximum Waypoint Stops (default: 6)", type=openapi.TYPE_INTEGER),
+            openapi.Parameter('priority_only', openapi.IN_QUERY, description="Include CRITICAL and HIGH severity incidents only", type=openapi.TYPE_BOOLEAN),
+        ],
+        responses={200: "Optimized Patrol Route Plan"}
+    )
+    def get(self, request):
+        if request.user.role not in ['ADMIN', 'STATION', 'PATROL_OFFICER', 'PATROL']:
+            return Response({"detail": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+
+        officer_id = request.query_params.get('officer_id')
+        max_waypoints = request.query_params.get('max_waypoints', 6)
+        priority_only = request.query_params.get('priority_only') == 'true'
+
+        try:
+            max_wps = int(max_waypoints)
+        except (ValueError, TypeError):
+            max_wps = 6
+
+        try:
+            off_id = int(officer_id) if officer_id else None
+        except (ValueError, TypeError):
+            off_id = None
+
+        try:
+            route_plan = PatrolService.optimize_patrol_route(
+                user=request.user,
+                officer_id=off_id,
+                max_waypoints=max_wps,
+                priority_only=priority_only
+            )
+            return Response(route_plan, status=status.HTTP_200_OK)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"error": f"Failed to generate patrol route: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
