@@ -91,8 +91,10 @@ export default function LoginPage() {
       navigate('/city');
     } else if (user.role === 'STATION' || user.role === 'POLICE_OFFICER' || user.role === 'POLICE') {
       navigate('/station');
+    } else if (user.role === 'PATROL' || user.role === 'OFFICER' || user.role === 'PATROL_OFFICER') {
+      navigate('/officer');
     } else {
-      setError('Patrol Officers must use the tactical mobile application.');
+      setError('Unsupported role authorization.');
       localStorage.clear();
     }
   };
@@ -368,6 +370,125 @@ export default function LoginPage() {
                     <ArrowRightIcon size={18} />
                   </button>
                 </form>
+
+                {/* Development / Testing Role Quick Selector */}
+                <div
+                  style={{
+                    marginTop: '22px',
+                    padding: '12px',
+                    backgroundColor: 'var(--palette-chalk)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius-xs)',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: '10px',
+                      fontWeight: '800',
+                      color: 'var(--palette-coastal-blue)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.8px',
+                      fontFamily: 'var(--font-mono)',
+                      marginBottom: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <span>⚡ AUTHORIZED ROLE PROFILES (DEV / TEST)</span>
+                    <span style={{ fontSize: '9px', color: 'var(--color-text-muted)' }}>Click to fill</span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData({ username: 'admin', password: 'admin' });
+                        setError(null);
+                      }}
+                      className="btn btn-secondary btn-xs"
+                      style={{
+                        justifyContent: 'flex-start',
+                        textAlign: 'left',
+                        height: 'auto',
+                        padding: '6px 8px',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                      }}
+                    >
+                      <div>
+                        <div style={{ color: 'var(--palette-charcoal-slate)' }}>Admin</div>
+                        <div style={{ fontSize: '9.5px', color: 'var(--color-text-muted)', fontWeight: '500' }}>City Command HQ</div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData({ username: 'station_navrangpura', password: 'station123' });
+                        setError(null);
+                      }}
+                      className="btn btn-secondary btn-xs"
+                      style={{
+                        justifyContent: 'flex-start',
+                        textAlign: 'left',
+                        height: 'auto',
+                        padding: '6px 8px',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                      }}
+                    >
+                      <div>
+                        <div style={{ color: 'var(--palette-charcoal-slate)' }}>Station Console</div>
+                        <div style={{ fontSize: '9.5px', color: 'var(--color-text-muted)', fontWeight: '500' }}>Navrangpura (NAV-01)</div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData({ username: 'station_satellite', password: 'station123' });
+                        setError(null);
+                      }}
+                      className="btn btn-secondary btn-xs"
+                      style={{
+                        justifyContent: 'flex-start',
+                        textAlign: 'left',
+                        height: 'auto',
+                        padding: '6px 8px',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                      }}
+                    >
+                      <div>
+                        <div style={{ color: 'var(--palette-charcoal-slate)' }}>Station Console</div>
+                        <div style={{ fontSize: '9.5px', color: 'var(--color-text-muted)', fontWeight: '500' }}>Satellite (SAT-02)</div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData({ username: 'patrol_rathod', password: 'patrol123' });
+                        setError(null);
+                      }}
+                      className="btn btn-secondary btn-xs"
+                      style={{
+                        justifyContent: 'flex-start',
+                        textAlign: 'left',
+                        height: 'auto',
+                        padding: '6px 8px',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                      }}
+                    >
+                      <div>
+                        <div style={{ color: 'var(--palette-charcoal-slate)' }}>Officer / Investigator</div>
+                        <div style={{ fontSize: '9.5px', color: 'var(--color-text-muted)', fontWeight: '500' }}>Field Case Workspace</div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
               </div>
             ) : (
               /* Step 2: Multi-Factor Authentication (Security Verification) */

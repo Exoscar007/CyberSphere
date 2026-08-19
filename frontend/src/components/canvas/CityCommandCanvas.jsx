@@ -88,9 +88,14 @@ export default function CityCommandCanvas({
           onTrackPatrol={onTrackPatrol}
           onViewAudit={(id) => {
             const found = incidents.find((i) => i.id === parseInt(id));
-            if (found) setSelectedIncident(found);
-            else navigate(`/city/history/${id}`);
+            if (found) {
+              setRailOpen(false);
+              setSelectedIncident(found);
+            } else {
+              navigate(`/city/history/${id}`);
+            }
           }}
+          showSearchBar={false}
           autoFit={true}
         />
       </div>
@@ -244,7 +249,12 @@ export default function CityCommandCanvas({
 
           <button
             type="button"
-            onClick={() => setRailOpen(!railOpen)}
+            onClick={() => {
+              if (!railOpen) {
+                setSelectedIncident(null);
+              }
+              setRailOpen(!railOpen);
+            }}
             className={`btn btn-sm ${railOpen ? 'btn-primary' : 'btn-secondary'}`}
             style={{ height: '32px', padding: '0 12px', gap: '5px' }}
             title="Toggle Operational Feeds Rail"
@@ -425,7 +435,10 @@ export default function CityCommandCanvas({
                 {pendingIncidents.map((inc) => (
                   <div
                     key={inc.id}
-                    onClick={() => setSelectedIncident(inc)}
+                    onClick={() => {
+                      setRailOpen(false);
+                      setSelectedIncident(inc);
+                    }}
                     style={{
                       padding: '10px 12px',
                       backgroundColor: 'var(--palette-chalk)',

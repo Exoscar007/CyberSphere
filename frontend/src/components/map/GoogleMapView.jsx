@@ -42,6 +42,51 @@ const isValidCoord = (c) =>
   c[0] >= -180 &&
   c[0] <= 180;
 
+let googleMapsPromise = null;
+
+function loadGoogleMapsLibraries(apiKey) {
+  if (typeof window !== 'undefined' && window.google?.maps?.Map) {
+    return Promise.resolve({
+      Map: window.google.maps.Map,
+      InfoWindow: window.google.maps.InfoWindow,
+    });
+  }
+
+  if (googleMapsPromise) {
+    return googleMapsPromise;
+  }
+
+  googleMapsPromise = (async () => {
+    if (!window.__GM_LOADED_KEY__ || window.__GM_LOADED_KEY__ !== apiKey.trim()) {
+      try {
+        setOptions({
+          key: apiKey.trim(),
+          v: 'weekly',
+        });
+        window.__GM_LOADED_KEY__ = apiKey.trim();
+      } catch (optErr) {
+        console.debug('setOptions notice:', optErr);
+      }
+    }
+
+    const libs = await Promise.all([
+      importLibrary('maps'),
+      importLibrary('places').catch(() => null),
+      importLibrary('geometry').catch(() => null),
+      importLibrary('marker').catch(() => null),
+      importLibrary('visualization').catch(() => null),
+    ]);
+
+    const mapsLib = libs[0];
+    return {
+      Map: mapsLib?.Map || window.google?.maps?.Map,
+      InfoWindow: mapsLib?.InfoWindow || window.google?.maps?.InfoWindow,
+    };
+  })();
+
+  return googleMapsPromise;
+}
+
 export default function GoogleMapView({
   apiKey,
   center = [23.0225, 72.5714],
@@ -89,6 +134,7 @@ export default function GoogleMapView({
 
   // Catch Google Maps Authentication Failures (Invalid Key, Billing, Referrer Restrictions)
   useEffect(() => {
+    const prevAuthFailure = window.gm_authFailure;
     window.gm_authFailure = () => {
       const err = 'Google Maps authentication failed. Please check your VITE_GOOGLE_MAPS_API_KEY, billing status, and Google Cloud Console API restrictions for localhost.';
       console.warn(err);
@@ -96,10 +142,13 @@ export default function GoogleMapView({
       if (typeof onError === 'function') {
         onError(err);
       }
+      if (typeof prevAuthFailure === 'function') {
+        prevAuthFailure();
+      }
     };
 
     return () => {
-      delete window.gm_authFailure;
+      window.gm_authFailure = prevAuthFailure;
     };
   }, [onError]);
 
@@ -115,38 +164,21 @@ export default function GoogleMapView({
 
     async function initMap() {
       try {
-        if (!window.__GM_LOADED_KEY__ || window.__GM_LOADED_KEY__ !== apiKey.trim()) {
-          try {
-            setOptions({
-              key: apiKey.trim(),
-              v: 'weekly',
-            });
-            window.__GM_LOADED_KEY__ = apiKey.trim();
-          } catch (optErr) {
-            console.debug('setOptions note:', optErr);
-          }
-        }
-
-        // Load all required Google Maps libraries in parallel with fast timeout
-        const [{ Map, InfoWindow }] = await Promise.race([
-          Promise.all([
-            importLibrary('maps'),
-            importLibrary('places'),
-            importLibrary('geometry'),
-            importLibrary('marker'),
-            importLibrary('visualization').catch(() => null),
-          ]),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Google Maps network timeout — switching to high-speed GIS')), 1800)
-          ),
-        ]);
+        const { Map, InfoWindow } = await loadGoogleMapsLibraries(apiKey);
 
         if (isCancelled || !mapContainerRef.current) return;
+
+        const MapConstructor = Map || window.google?.maps?.Map;
+        const InfoWindowConstructor = InfoWindow || window.google?.maps?.InfoWindow;
+
+        if (!MapConstructor) {
+          throw new Error('Google Maps Map constructor unavailable.');
+        }
 
         const initialLat = center && center[0] ? center[0] : DEFAULT_CENTER.lat;
         const initialLng = center && center[1] ? center[1] : DEFAULT_CENTER.lng;
 
-        const map = new Map(mapContainerRef.current, {
+        const map = new MapConstructor(mapContainerRef.current, {
           center: { lat: initialLat, lng: initialLng },
           zoom: zoom || 12,
           mapTypeId: window.google.maps.MapTypeId.ROADMAP,
@@ -164,7 +196,9 @@ export default function GoogleMapView({
           gestureHandling: 'greedy',
         });
 
-        infoWindowRef.current = new InfoWindow();
+        if (InfoWindowConstructor) {
+          infoWindowRef.current = new InfoWindowConstructor();
+        }
         mapInstanceRef.current = map;
         clustererRef.current = new MarkerClusterer({ map });
 
@@ -178,7 +212,9 @@ export default function GoogleMapView({
           });
         }
 
-        setIsLoaded(true);
+        if (!isCancelled) {
+          setIsLoaded(true);
+        }
       } catch (err) {
         if (!isCancelled) {
           console.warn('Google Maps API failed to load:', err);
@@ -195,8 +231,34 @@ export default function GoogleMapView({
     return () => {
       isCancelled = true;
       if (clustererRef.current) {
-        clustererRef.current.clearMarkers();
+        try { clustererRef.current.clearMarkers(); } catch (e) { void e; }
       }
+      markersRef.current.forEach((m) => {
+        try { m.setMap(null); } catch (e) { void e; }
+      });
+      markersRef.current = [];
+      polylinesRef.current.forEach((p) => {
+        try { p.setMap(null); } catch (e) { void e; }
+      });
+      polylinesRef.current = [];
+      circlesRef.current.forEach((c) => {
+        try { c.setMap(null); } catch (e) { void e; }
+      });
+      circlesRef.current = [];
+      if (searchMarkerRef.current) {
+        try { searchMarkerRef.current.setMap(null); } catch (e) { void e; }
+        searchMarkerRef.current = null;
+      }
+      if (infoWindowRef.current) {
+        try { infoWindowRef.current.close(); } catch (e) { void e; }
+      }
+      if (heatmapLayerRef.current) {
+        try { heatmapLayerRef.current.setMap(null); } catch (e) { void e; }
+        heatmapLayerRef.current = null;
+      }
+      mapInstanceRef.current = null;
+      hasInitialFittedRef.current = false;
+      setIsLoaded(false);
     };
   }, [apiKey]);
 

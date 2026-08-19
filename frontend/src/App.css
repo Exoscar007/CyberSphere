@@ -392,18 +392,13 @@
   color: var(--color-text-muted);
 }
 
-/* --- 2. Asymmetric Floating City Status Module (Top-Right) --- */
+/* --- 2. Floating City Status Module --- */
 .canvas-hud-status {
-  position: absolute;
-  top: 16px;
-  right: 68px;
+  position: relative;
   z-index: 20;
   padding: 0;
   border-radius: var(--radius-sm);
-  animation: floatUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   user-select: none;
-  min-width: 320px;
-  overflow: hidden;
 }
 
 /* Prominent #333333 Header for City Status Module */

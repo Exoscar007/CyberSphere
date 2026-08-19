@@ -48,8 +48,6 @@ export default function CommandPalette({ isOpen, onClose, onAction }) {
         { id: 'cat-job', title: 'Recruitment & Job Offer Scams', icon: <ShieldIcon size={14} />, action: () => navigate(isAdmin ? '/city/firs' : '/station/firs') },
         { id: 'cat-loan', title: 'Unregulated Instant Loan App Fraud', icon: <ShieldIcon size={14} />, action: () => navigate(isAdmin ? '/city/firs' : '/station/firs') },
         { id: 'cat-social', title: 'Social Media Impersonation & Harassment', icon: <ShieldIcon size={14} />, action: () => navigate(isAdmin ? '/city/firs' : '/station/firs') },
-        { id: 'cat-ransomware', title: 'Ransomware & Critical Infrastructure Attacks', icon: <ShieldIcon size={14} />, action: () => navigate(isAdmin ? '/city/firs' : '/station/firs') },
-        { id: 'cat-datatheft', title: 'Corporate Data Theft & Unauthorized Access', icon: <ShieldIcon size={14} />, action: () => navigate(isAdmin ? '/city/firs' : '/station/firs') },
       ],
     },
     {

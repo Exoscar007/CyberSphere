@@ -1975,13 +1975,39 @@ export default function IntelligenceDashboard() {
                             </div>
                           </div>
 
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ color: cfg.color, fontWeight: '800', fontSize: '12px' }}>
-                              {hotspot.cybercrime_count} Cyber
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ color: cfg.color, fontWeight: '800', fontSize: '12px' }}>
+                                {hotspot.cybercrime_count} Cyber
+                              </div>
+                              <div style={{ fontSize: '9.5px', color: 'var(--color-text-muted)' }}>
+                                {hotspot.cybercrime_ratio}% ratio
+                              </div>
                             </div>
-                            <div style={{ fontSize: '9.5px', color: 'var(--color-text-muted)' }}>
-                              {hotspot.cybercrime_ratio}% ratio
-                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectCyberHotspot(hotspot);
+                              }}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: cfg.color,
+                                fontSize: '10.5px',
+                                fontWeight: '800',
+                                fontFamily: 'var(--font-mono)',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '2px',
+                                padding: '2px 4px',
+                              }}
+                              title={`Center and inspect ${hotspot.zone_name} on Cyber GIS Map`}
+                              aria-label={`Inspect hotspot ${hotspot.zone_name}`}
+                            >
+                              [INSPECT] <ChevronRightIcon size={12} />
+                            </button>
                           </div>
                         </li>
                       );
