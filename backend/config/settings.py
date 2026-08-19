@@ -108,8 +108,13 @@ CHANNEL_LAYERS = {
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
 DATABASES = {
-    'default': env.db('DATABASE_URL', default='sqlite:///db.sqlite3')
+    'default': env.db(
+        'DATABASE_URL',
+        default='sqlite:///db.sqlite3'
+    )
 }
+
+DATABASES['default']['ENGINE'] = 'django.contrib.gis.db.backends.postgis'
 
 
 # Password validation
