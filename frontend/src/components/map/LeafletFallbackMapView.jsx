@@ -137,22 +137,48 @@ function MapController({
   const map = useMap();
   const hasFittedInitialRef = useRef(false);
 
-  // Instantly invalidate size on mount so map tiles and canvas render without blank delay
+  // Instantly invalidate size on mount and on animation frame / timeouts so map tiles and canvas render without blank delay
   useEffect(() => {
     map.invalidateSize();
-    const raf = requestAnimationFrame(() => {
+    const timer1 = setTimeout(() => {
       map.invalidateSize();
-    });
-    return () => cancelAnimationFrame(raf);
+    }, 50);
+    const timer2 = setTimeout(() => {
+      map.invalidateSize();
+    }, 150);
+    const timer3 = setTimeout(() => {
+      map.invalidateSize();
+    }, 350);
+    const timer4 = setTimeout(() => {
+      map.invalidateSize();
+    }, 700);
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      clearTimeout(timer3);
+      clearTimeout(timer4);
+    };
   }, [map]);
 
-  // Center pan on center changes
+  // Observe container dimensions and automatically invalidate size on resize or tab transition
+  useEffect(() => {
+    const container = map.getContainer();
+    if (!container) return;
+    const ro = new ResizeObserver(() => {
+      map.invalidateSize();
+    });
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [map]);
+
+  // Sync center and zoom
   useEffect(() => {
     if (center && Array.isArray(center) && center.length === 2 && center[0] !== 0 && center[1] !== 0) {
+      map.invalidateSize();
       if (!hasFittedInitialRef.current) {
         map.setView(center, zoom || 13, { animate: false });
       } else {
-        map.panTo(center, { animate: true, duration: 0.35 });
+        map.flyTo(center, zoom || 13, { duration: 0.5 });
       }
     }
   }, [center, zoom, map]);
@@ -361,6 +387,14 @@ function LeafletHeatmapOverlay({
   return null;
 }
 
+function getCyberThreatColor(level) {
+  const lvl = (level || '').toUpperCase();
+  if (lvl === 'CRITICAL') return '#7C3AED'; // Vibrant Purple Cyber
+  if (lvl === 'HIGH') return '#C026D3';     // Magenta Cyber
+  if (lvl === 'MEDIUM') return '#0284C7';   // Neon Coastal Blue
+  return '#0D9488';                         // Teal
+}
+
 export default function LeafletFallbackMapView({
   center = DEFAULT_CENTER,
   zoom = 12,
@@ -372,6 +406,11 @@ export default function LeafletFallbackMapView({
   onViewAudit,
   riskScores = [],
   showRiskZones = false,
+  cyberHotspots = [],
+  showCyberHotspots = false,
+  selectedCyberHotspot = null,
+  onSelectCyberHotspot = null,
+  showSearchBar = true,
   destination = null,
   onLocationSelect = null,
   recommendations = null,
@@ -381,14 +420,14 @@ export default function LeafletFallbackMapView({
   optimizedRoute = null,
   autoFit = true,
 }) {
-  const [activeLayerKey, setActiveLayerKey] = useState('google_streets'); // Default to full Google Maps with complete POIs and street details
+  const [activeLayerKey, setActiveLayerKey] = useState('voyager'); // Default to high-performance Carto Voyager GIS vector tiles (100% reliable)
   const [showLayerMenu, setShowLayerMenu] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(true);
   const [searchLocation, setSearchLocation] = useState(null);
   const [locateTrigger, setLocateTrigger] = useState(0);
   const [resetTrigger, setResetTrigger] = useState(0);
 
-  const activeLayer = BASE_LAYERS[activeLayerKey] || BASE_LAYERS.google_streets;
+  const activeLayer = BASE_LAYERS[activeLayerKey] || BASE_LAYERS.voyager;
 
   // Calculate combined bounds for auto-fit
   const boundsData = useMemo(() => {
@@ -424,8 +463,17 @@ export default function LeafletFallbackMapView({
         selectedIncident.location_input.coordinates[0],
       ]);
     }
+    if (showCyberHotspots && cyberHotspots) {
+      cyberHotspots.forEach((h) => {
+        const lng = h.center?.coordinates ? h.center.coordinates[0] : (typeof h.longitude === 'number' ? h.longitude : null);
+        const lat = h.center?.coordinates ? h.center.coordinates[1] : (typeof h.latitude === 'number' ? h.latitude : null);
+        if (lat !== null && lng !== null && isValidCoord([lng, lat])) {
+          points.push([lat, lng]);
+        }
+      });
+    }
     return points;
-  }, [incidents, activePatrols, trackLocations, selectedIncident]);
+  }, [incidents, activePatrols, trackLocations, selectedIncident, showCyberHotspots, cyberHotspots]);
 
   // Fullscreen toggle
   const wrapperRef = useRef(null);
@@ -441,10 +489,12 @@ export default function LeafletFallbackMapView({
   return (
     <div className="cyber-map-wrapper" ref={wrapperRef}>
       {/* Search Bar */}
-      <MapSearchBar
-        onSelectLocation={(loc) => setSearchLocation(loc)}
-        isGoogleLoaded={false}
-      />
+      {showSearchBar && (
+        <MapSearchBar
+          onSelectLocation={(loc) => setSearchLocation(loc)}
+          isGoogleLoaded={false}
+        />
+      )}
 
       {/* Provider Badge */}
       <div className="map-provider-badge map-provider-badge--fallback" title="Running in high-performance GIS fallback engine.">
@@ -1058,38 +1108,300 @@ export default function LeafletFallbackMapView({
             ) : null
           )}
 
-        {/* 8. Risk Zones (Intelligence Dashboard) */}
+        {/* 8. Predictive Risk Zones (Intelligence Dashboard & GIS Map) */}
         {showRiskZones &&
           riskScores.map((zone, idx) => {
             const coords = zone.center?.coordinates || [72.57, 23.02];
             const color = getRiskColor(zone.score);
+            const riskLvl = zone.risk_level || getRiskLabel(zone.score);
+            const factors = zone.factors || {};
+            const isML = zone.model_status === 'trained_ml';
+            const modelBadge = isML ? 'ML (RANDOM FOREST)' : 'BASELINE STATISTICAL';
+
             return (
-              <CircleMarker
-                key={`zone-${idx}`}
-                center={[coords[1], coords[0]]}
-                radius={Math.max(12, zone.score / 3.5)}
-                pathOptions={{
-                  color,
-                  fillColor: color,
-                  fillOpacity: 0.3,
-                  weight: 1.5,
-                }}
-              >
-                <Tooltip permanent direction="center" opacity={0.9}>
-                  <span style={{ fontSize: '9px', fontWeight: 700, color: '#242E29', fontFamily: 'var(--font-mono)' }}>
-                    {zone.zone_name.substring(0, 3).toUpperCase()}
-                  </span>
-                </Tooltip>
-                <Popup>
-                  <div className="cyber-map-popup">
-                    <div className="cyber-map-popup-header" style={{ color }}>
-                      <span>{zone.zone_name.toUpperCase()}</span>
+              <React.Fragment key={`zone-${idx}-${zone.id || idx}`}>
+                {/* Outer Warning Buffer Ring for Critical/High */}
+                {(riskLvl === 'CRITICAL' || riskLvl === 'HIGH') && (
+                  <CircleMarker
+                    center={[coords[1], coords[0]]}
+                    radius={Math.max(22, (zone.score / 100) * 36)}
+                    pathOptions={{
+                      color: color,
+                      fillColor: color,
+                      fillOpacity: 0.12,
+                      weight: 1.5,
+                      dashArray: '4, 4',
+                    }}
+                  />
+                )}
+
+                {/* Core Predictive Hotspot Cell */}
+                <CircleMarker
+                  center={[coords[1], coords[0]]}
+                  radius={Math.max(14, (zone.score / 100) * 26)}
+                  pathOptions={{
+                    color: color,
+                    fillColor: color,
+                    fillOpacity: 0.45,
+                    weight: 2,
+                  }}
+                >
+                  <Tooltip permanent direction="center" opacity={0.92}>
+                    <span style={{
+                      fontSize: '9px',
+                      fontWeight: 800,
+                      color: '#1E293B',
+                      fontFamily: 'var(--font-mono)',
+                      backgroundColor: 'rgba(255, 255, 255, 0.88)',
+                      padding: '1px 4px',
+                      borderRadius: '3px',
+                      border: `1px solid ${color}`,
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.15)'
+                    }}>
+                      ⚡ {zone.zone_name.substring(0, 4).toUpperCase()} ({zone.score?.toFixed(0)})
+                    </span>
+                  </Tooltip>
+                  <Popup>
+                    <div className="cyber-map-popup" style={{ minWidth: '240px', maxWidth: '310px' }}>
+                      <div className="cyber-map-popup-header" style={{ color, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>PREDICTED RISK ZONE</span>
+                        <span style={{
+                          fontSize: '9px',
+                          padding: '2px 6px',
+                          borderRadius: '3px',
+                          backgroundColor: `${color}22`,
+                          color: color,
+                          fontWeight: 800,
+                        }}>
+                          {riskLvl}
+                        </span>
+                      </div>
+                      
+                      <div style={{ marginTop: '4px', fontSize: '13px', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+                        {zone.zone_name.toUpperCase()}
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px', margin: '8px 0', padding: '6px 8px', backgroundColor: 'var(--palette-chalk)', borderRadius: '4px', fontSize: '10.5px', fontFamily: 'var(--font-mono)' }}>
+                        <div><strong>Risk Score:</strong> <span style={{ color, fontWeight: 800 }}>{zone.score?.toFixed(1)}/100</span></div>
+                        <div><strong>Model:</strong> <span style={{ fontSize: '9px', color: 'var(--color-text-secondary)' }}>{modelBadge}</span></div>
+                        <div><strong>Window:</strong> {zone.prediction_period || 'Next 24h'}</div>
+                        <div><strong>Confidence:</strong> {zone.confidence ? `${(zone.confidence * 100).toFixed(0)}%` : 'N/A (Baseline)'}</div>
+                      </div>
+
+                      <div style={{ fontSize: '11px', lineHeight: 1.4, borderTop: '1px solid var(--color-border-subtle)', paddingTop: '6px' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '3px', textTransform: 'uppercase', fontSize: '9.5px' }}>
+                          Contributing Intelligence Factors:
+                        </div>
+                        <div>• <strong>24h Activity:</strong> {factors.recent_incidents_24h ?? 0} incidents</div>
+                        <div>• <strong>7-Day Trend:</strong> {factors.recent_incidents_7d ?? 0} incidents ({factors.seven_day_trend_pct || '0%'})</div>
+                        <div>• <strong>Primary Domain:</strong> {factors.top_category || 'N/A'}</div>
+                        {factors.cyber_incidents_7d > 0 && (
+                          <div>• <strong>Cybercrimes:</strong> {factors.cyber_incidents_7d} ({Math.round((factors.cybercrime_ratio || 0) * 100)}%)</div>
+                        )}
+                        {factors.explanation_summary && (
+                          <div style={{ marginTop: '6px', fontSize: '10.5px', fontStyle: 'italic', color: 'var(--color-text-muted)', backgroundColor: 'var(--palette-oatmeal)', padding: '5px 7px', borderRadius: '3px' }}>
+                            "{factors.explanation_summary}"
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div><strong>Risk Score:</strong> {zone.score?.toFixed(1)} / 100</div>
-                    <div><strong>Threat Level:</strong> {getRiskLabel(zone.score)}</div>
-                  </div>
-                </Popup>
-              </CircleMarker>
+                  </Popup>
+                </CircleMarker>
+              </React.Fragment>
+            );
+          })}
+
+        {/* 8.5 Dedicated Cybercrime Hotspots Layer */}
+        {showCyberHotspots &&
+          cyberHotspots.map((hotspot, idx) => {
+            const lng = hotspot.center?.coordinates ? hotspot.center.coordinates[0] : (typeof hotspot.longitude === 'number' ? hotspot.longitude : null);
+            const lat = hotspot.center?.coordinates ? hotspot.center.coordinates[1] : (typeof hotspot.latitude === 'number' ? hotspot.latitude : null);
+            
+            // Strictly exclude hotspots without valid real coordinates (never invent fake fallbacks)
+            if (lat === null || lng === null || !isValidCoord([lng, lat])) {
+              return null;
+            }
+
+            const color = getCyberThreatColor(hotspot.threat_level);
+            const threatLvl = hotspot.threat_level || 'MEDIUM';
+            const isSelected = selectedCyberHotspot?.station_id === hotspot.station_id || selectedCyberHotspot?.zone_name === hotspot.zone_name;
+
+            return (
+              <React.Fragment key={`cyber-hotspot-${idx}-${hotspot.station_code || idx}`}>
+                {/* Selected Highlight Indicator Ring */}
+                {isSelected && (
+                  <CircleMarker
+                    center={[lat, lng]}
+                    radius={Math.max(26, (hotspot.cybercrime_count || 1) * 14 + 6)}
+                    pathOptions={{
+                      color: '#F59E0B',
+                      fillColor: '#F59E0B',
+                      fillOpacity: 0.2,
+                      weight: 2.5,
+                      dashArray: '3, 4',
+                    }}
+                  />
+                )}
+
+                {/* Cyber threat radius glow ring */}
+                <CircleMarker
+                  center={[lat, lng]}
+                  radius={Math.max(20, (hotspot.cybercrime_count || 1) * 12)}
+                  pathOptions={{
+                    color: color,
+                    fillColor: color,
+                    fillOpacity: isSelected ? 0.25 : 0.15,
+                    weight: isSelected ? 2.5 : 1.5,
+                    dashArray: '5, 5',
+                  }}
+                  eventHandlers={{
+                    click: () => {
+                      if (onSelectCyberHotspot) onSelectCyberHotspot(hotspot);
+                    },
+                  }}
+                />
+
+                {/* Core Cyber Hotspot Pin */}
+                <CircleMarker
+                  center={[lat, lng]}
+                  radius={isSelected ? 13 : 11}
+                  pathOptions={{
+                    color: isSelected ? '#F59E0B' : '#FFFFFF',
+                    fillColor: color,
+                    fillOpacity: 0.95,
+                    weight: isSelected ? 3 : 2.5,
+                  }}
+                  eventHandlers={{
+                    click: () => {
+                      if (onSelectCyberHotspot) onSelectCyberHotspot(hotspot);
+                    },
+                  }}
+                >
+                  <Tooltip permanent direction="top" offset={[0, -10]} opacity={0.94}>
+                    <span
+                      style={{
+                        fontSize: '9.5px',
+                        fontWeight: 800,
+                        color: '#FFFFFF',
+                        fontFamily: 'var(--font-mono)',
+                        backgroundColor: isSelected ? '#7C3AED' : color,
+                        padding: '2px 6px',
+                        borderRadius: '3px',
+                        border: isSelected ? '1.5px solid #F59E0B' : '1px solid rgba(255,255,255,0.7)',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+                        letterSpacing: '0.3px',
+                      }}
+                    >
+                      🛡️ CYBER: {hotspot.zone_name.toUpperCase()} ({hotspot.cybercrime_count})
+                    </span>
+                  </Tooltip>
+
+                  <Popup>
+                    <div className="cyber-map-popup" style={{ minWidth: '270px', maxWidth: '330px' }}>
+                      <div
+                        className="cyber-map-popup-header"
+                        style={{
+                          color,
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          borderBottom: `2px solid ${color}`,
+                          paddingBottom: '4px',
+                        }}
+                      >
+                        <span style={{ fontWeight: 800, letterSpacing: '0.5px' }}>
+                          🛡️ CYBERCRIME HOTSPOT
+                        </span>
+                        <span
+                          style={{
+                            fontSize: '9px',
+                            padding: '2px 6px',
+                            borderRadius: '3px',
+                            backgroundColor: color,
+                            color: '#FFFFFF',
+                            fontWeight: 800,
+                            fontFamily: 'var(--font-mono)',
+                          }}
+                        >
+                          {threatLvl}
+                        </span>
+                      </div>
+
+                      <div style={{ marginTop: '6px', fontSize: '13.5px', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+                        {hotspot.zone_name.toUpperCase()}
+                      </div>
+                      <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)', marginBottom: '8px' }}>
+                        Jurisdiction: {hotspot.station_name} ({hotspot.station_code})
+                      </div>
+
+                      {/* Metrics 2x2 grid */}
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 1fr',
+                          gap: '6px',
+                          padding: '6px 8px',
+                          backgroundColor: 'var(--palette-chalk)',
+                          borderRadius: '4px',
+                          fontSize: '10.5px',
+                          fontFamily: 'var(--font-mono)',
+                          marginBottom: '8px',
+                        }}
+                      >
+                        <div>
+                          <strong>Cybercrimes:</strong> <span style={{ color, fontWeight: 800 }}>{hotspot.cybercrime_count}</span>
+                        </div>
+                        <div>
+                          <strong>Cyber Ratio:</strong> <span style={{ fontWeight: 800 }}>{hotspot.cybercrime_ratio}%</span>
+                        </div>
+                        <div>
+                          <strong>Physical Crimes:</strong> {hotspot.physical_crime_count}
+                        </div>
+                        <div>
+                          <strong>Trend:</strong> <span style={{ fontWeight: 800 }}>{hotspot.trend}</span>
+                        </div>
+                      </div>
+
+                      {/* Domain breakdown */}
+                      <div style={{ fontSize: '11px', lineHeight: 1.45, borderTop: '1px solid var(--color-border-subtle)', paddingTop: '6px' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '3px', textTransform: 'uppercase', fontSize: '9.5px' }}>
+                          Primary Cyber Patterns:
+                        </div>
+                        <div>• <strong>Dominant:</strong> {hotspot.dominant_type}</div>
+                        {hotspot.fraud_count > 0 && <div>• <strong>Financial &amp; Banking Fraud:</strong> {hotspot.fraud_count} cases</div>}
+                        {hotspot.phishing_count > 0 && <div>• <strong>Phishing &amp; Credential Scams:</strong> {hotspot.phishing_count} cases</div>}
+                        {hotspot.identity_count > 0 && <div>• <strong>Identity Theft:</strong> {hotspot.identity_count} cases</div>}
+                        {hotspot.scam_count > 0 && <div>• <strong>Online Extortion &amp; Scams:</strong> {hotspot.scam_count} cases</div>}
+
+                        {/* Contextual AI Risk Score */}
+                        {hotspot.ai_context && (
+                          <div style={{ marginTop: '6px', padding: '4px 6px', backgroundColor: 'rgba(40, 85, 112, 0.08)', borderRadius: '3px', fontSize: '10px' }}>
+                            <strong>Contextual AI Risk:</strong> {hotspot.ai_context.ai_risk_score}/100 ({hotspot.ai_context.ai_risk_level}) [{hotspot.ai_context.ai_model_status}]
+                          </div>
+                        )}
+
+                        {/* Explanation */}
+                        {hotspot.explanation && (
+                          <div
+                            style={{
+                              marginTop: '6px',
+                              fontSize: '10px',
+                              fontStyle: 'italic',
+                              color: 'var(--color-text-muted)',
+                              backgroundColor: 'var(--palette-oatmeal)',
+                              padding: '5px 7px',
+                              borderRadius: '3px',
+                              lineHeight: 1.35,
+                            }}
+                          >
+                            "{hotspot.explanation}"
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </Popup>
+                </CircleMarker>
+              </React.Fragment>
             );
           })}
 

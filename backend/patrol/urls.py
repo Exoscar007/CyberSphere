@@ -4,7 +4,8 @@ from .views import (
     PatrolAssignmentRetrieveUpdateAPIView,
     PatrolLocationPingAPIView,
     PatrolLocationHistoryAPIView,
-    PatrolRouteOptimizationAPIView
+    PatrolRouteOptimizationAPIView,
+    PatrolHotspotRecommendationAPIView,
 )
 
 urlpatterns = [
@@ -13,5 +14,7 @@ urlpatterns = [
     path('assignments/<int:pk>/ping/', PatrolLocationPingAPIView.as_view(), name='patrol-ping'),
     path('assignments/<int:pk>/locations/', PatrolLocationHistoryAPIView.as_view(), name='patrol-locations-history'),
     path('optimize-route/', PatrolRouteOptimizationAPIView.as_view(), name='patrol-optimize-route'),
+    path('recommend-for-hotspot/', PatrolHotspotRecommendationAPIView.as_view(), name='patrol-recommend-hotspot'),
 ]
+
 

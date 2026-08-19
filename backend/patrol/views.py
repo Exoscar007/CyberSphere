@@ -159,3 +159,40 @@ class PatrolRouteOptimizationAPIView(APIView):
         except Exception as e:
             return Response({"error": f"Failed to generate patrol route: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+class PatrolHotspotRecommendationAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        manual_parameters=[
+            openapi.Parameter('zone_id', openapi.IN_QUERY, description="Target Risk Zone ID", type=openapi.TYPE_INTEGER),
+            openapi.Parameter('lat', openapi.IN_QUERY, description="Target Latitude", type=openapi.TYPE_NUMBER),
+            openapi.Parameter('lng', openapi.IN_QUERY, description="Target Longitude", type=openapi.TYPE_NUMBER),
+            openapi.Parameter('risk_level', openapi.IN_QUERY, description="Target Risk Level (CRITICAL, HIGH, etc.)", type=openapi.TYPE_STRING),
+        ],
+        responses={200: "Hotspot Patrol Dispatch Recommendations"}
+    )
+    def get(self, request):
+        if request.user.role not in ['ADMIN', 'STATION', 'PATROL_OFFICER', 'PATROL']:
+            return Response({"detail": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+
+        zone_id = request.query_params.get('zone_id')
+        lat = request.query_params.get('lat')
+        lng = request.query_params.get('lng')
+        risk_level = request.query_params.get('risk_level')
+
+        try:
+            zid = int(zone_id) if zone_id else None
+        except (ValueError, TypeError):
+            zid = None
+
+        recommendations = PatrolService.recommend_patrol_for_hotspot(
+            user=request.user,
+            zone_id=zid,
+            lat=lat,
+            lng=lng,
+            risk_level=risk_level
+        )
+        return Response(recommendations, status=status.HTTP_200_OK)
+
+

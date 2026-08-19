@@ -59,8 +59,15 @@ class RealtimeMonitoringWebSocketTests(TransactionTestCase):
             station=self.station_a,
         )
 
+    def tearDown(self):
+        from django.db import connections
+        connections.close_all()
+        super().tearDown()
+
+
     def get_jwt(self, user):
         return str(RefreshToken.for_user(user).access_token)
+
 
     @database_sync_to_async
     def create_incident(self, **kwargs):

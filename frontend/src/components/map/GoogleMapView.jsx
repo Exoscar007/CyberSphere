@@ -54,6 +54,11 @@ export default function GoogleMapView({
   onViewAudit,
   riskScores = [],
   showRiskZones = false,
+  cyberHotspots = [],
+  showCyberHotspots = false,
+  selectedCyberHotspot = null,
+  onSelectCyberHotspot = null,
+  showSearchBar = true,
   destination = null,
   onLocationSelect = null,
   recommendations = null,
@@ -194,6 +199,17 @@ export default function GoogleMapView({
       }
     };
   }, [apiKey]);
+
+  // Center and Zoom synchronization on prop changes (e.g. Inspect button, Search, Hotspot selection)
+  useEffect(() => {
+    if (!isLoaded || !mapInstanceRef.current || !window.google) return;
+    if (center && Array.isArray(center) && center.length === 2 && center[0] !== 0 && center[1] !== 0) {
+      mapInstanceRef.current.panTo({ lat: center[0], lng: center[1] });
+      if (zoom) {
+        mapInstanceRef.current.setZoom(zoom);
+      }
+    }
+  }, [center, zoom, isLoaded]);
 
   // Handle map type changes (Roadmap, Satellite, Hybrid, Terrain)
   const handleSetMapType = (type) => {
@@ -739,6 +755,108 @@ export default function GoogleMapView({
       });
     }
 
+    // 8.5 Cybercrime Hotspots Layer
+    if (showCyberHotspots && cyberHotspots && cyberHotspots.length > 0) {
+      cyberHotspots.forEach((hotspot) => {
+        const lng = hotspot.center?.coordinates ? hotspot.center.coordinates[0] : (typeof hotspot.longitude === 'number' ? hotspot.longitude : null);
+        const lat = hotspot.center?.coordinates ? hotspot.center.coordinates[1] : (typeof hotspot.latitude === 'number' ? hotspot.latitude : null);
+
+        // Exclude hotspots without valid coordinates (never invent fake coordinates)
+        if (lat === null || lng === null || !isValidCoord([lng, lat])) {
+          return;
+        }
+
+        bounds.extend({ lat, lng });
+        hasBounds = true;
+
+        const threatLvl = (hotspot.threat_level || 'MEDIUM').toUpperCase();
+        const color = threatLvl === 'CRITICAL' ? '#7C3AED' : threatLvl === 'HIGH' ? '#C026D3' : threatLvl === 'MEDIUM' ? '#0284C7' : '#0D9488';
+        const isSelected = selectedCyberHotspot?.station_id === hotspot.station_id || selectedCyberHotspot?.zone_name === hotspot.zone_name;
+
+        // Selected Outer Highlight Circle
+        if (isSelected) {
+          const selectRing = new google.maps.Circle({
+            map,
+            center: { lat, lng },
+            radius: Math.max(700, (hotspot.cybercrime_count || 1) * 450 + 200),
+            fillColor: '#F59E0B',
+            fillOpacity: 0.2,
+            strokeColor: '#F59E0B',
+            strokeWeight: 2.5,
+          });
+          circlesRef.current.push(selectRing);
+        }
+
+        // Threat Radius Circle
+        const circle = new google.maps.Circle({
+          map,
+          center: { lat, lng },
+          radius: Math.max(500, (hotspot.cybercrime_count || 1) * 350),
+          fillColor: color,
+          fillOpacity: isSelected ? 0.3 : 0.18,
+          strokeColor: color,
+          strokeWeight: isSelected ? 2.5 : 1.5,
+        });
+
+        // Core Pin Marker
+        const pinMarker = new google.maps.Marker({
+          position: { lat, lng },
+          map,
+          title: `🛡️ CYBER: ${hotspot.zone_name.toUpperCase()} (${hotspot.cybercrime_count} cases)`,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: isSelected ? 12 : 9,
+            fillColor: isSelected ? '#7C3AED' : color,
+            fillOpacity: 0.95,
+            strokeColor: isSelected ? '#F59E0B' : '#ffffff',
+            strokeWeight: isSelected ? 3 : 2,
+          },
+        });
+
+        const openPopup = () => {
+          if (onSelectCyberHotspot) onSelectCyberHotspot(hotspot);
+
+          infoWindowRef.current.setContent(`
+            <div style="font-family: monospace; font-size: 11px; color: #0f172a; min-width: 240px; max-width: 320px; line-height: 1.45;">
+              <div style="border-bottom: 2px solid ${color}; padding-bottom: 4px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+                <strong style="color: ${color}; font-size: 12px;">🛡️ CYBERCRIME HOTSPOT</strong>
+                <span style="font-size: 9px; font-weight: 800; padding: 1px 6px; border-radius: 3px; background-color: ${color}; color: #ffffff;">${threatLvl}</span>
+              </div>
+              <div style="font-size: 13px; font-weight: 800; margin-bottom: 2px;">${hotspot.zone_name.toUpperCase()}</div>
+              <div style="font-size: 10px; color: #64748b; margin-bottom: 8px;">Jurisdiction: ${hotspot.station_name} (${hotspot.station_code})</div>
+              
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: #f8fafc; padding: 6px; border-radius: 4px; margin-bottom: 8px;">
+                <div><strong>Cybercrimes:</strong> <span style="color: ${color}; font-weight: 800;">${hotspot.cybercrime_count}</span> (${hotspot.cybercrime_ratio}%)</div>
+                <div><strong>Physical Crimes:</strong> ${hotspot.physical_crime_count}</div>
+                <div><strong>Dominant:</strong> ${hotspot.dominant_type}</div>
+                <div><strong>Trend:</strong> ${hotspot.trend}</div>
+              </div>
+
+              ${hotspot.fraud_count > 0 ? `<div>• Financial Fraud: ${hotspot.fraud_count}</div>` : ''}
+              ${hotspot.phishing_count > 0 ? `<div>• Phishing Scams: ${hotspot.phishing_count}</div>` : ''}
+              ${hotspot.identity_count > 0 ? `<div>• Identity Theft: ${hotspot.identity_count}</div>` : ''}
+
+              ${hotspot.ai_context ? `
+                <div style="margin-top: 6px; padding: 4px 6px; background: rgba(40, 85, 112, 0.08); border-radius: 3px; font-size: 10px;">
+                  <strong>Contextual AI Risk:</strong> ${hotspot.ai_context.ai_risk_score}/100 (${hotspot.ai_context.ai_risk_level}) [${hotspot.ai_context.ai_model_status}]
+                </div>
+              ` : ''}
+
+              ${hotspot.explanation ? `<div style="margin-top: 6px; font-style: italic; font-size: 10px; color: #475569; background: #f1f5f9; padding: 4px 6px; border-radius: 3px;">"${hotspot.explanation}"</div>` : ''}
+            </div>
+          `);
+          infoWindowRef.current.setPosition({ lat, lng });
+          infoWindowRef.current.open(map);
+        };
+
+        circle.addListener('click', openPopup);
+        pinMarker.addListener('click', openPopup);
+
+        circlesRef.current.push(circle);
+        markersRef.current.push(pinMarker);
+      });
+    }
+
     // Auto-fit bounds on initial load if enabled and items exist
     if (autoFit && hasBounds && map && !hasInitialFittedRef.current) {
       map.fitBounds(bounds, 50);
@@ -755,6 +873,10 @@ export default function GoogleMapView({
     onViewAudit,
     riskScores,
     showRiskZones,
+    cyberHotspots,
+    showCyberHotspots,
+    selectedCyberHotspot,
+    onSelectCyberHotspot,
     destination,
     recommendations,
     onSelectRecommendation,
@@ -772,7 +894,7 @@ export default function GoogleMapView({
       <div ref={mapContainerRef} className="cyber-map-container" />
 
       {/* Floating Search Bar */}
-      {isLoaded && (
+      {showSearchBar && isLoaded && (
         <MapSearchBar
           onSelectLocation={handleSearchSelect}
           isGoogleLoaded={true}

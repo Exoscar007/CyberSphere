@@ -5,10 +5,27 @@ class PatrolService:
     @staticmethod
     def assign_patrol(user, officer, zone_name, destination, priority, instructions, fir=None, incident=None):
         station = user.station if hasattr(user, 'station') else None
-        return PatrolRepository.create_assignment(
+        assignment = PatrolRepository.create_assignment(
             officer=officer, zone_name=zone_name, destination=destination, priority=priority, instructions=instructions,
             station=station, fir=fir, incident=incident
         )
+        try:
+            from intelligence.audit_service import AuditLogService
+            from intelligence.models import AuditEventType, AuditEventCategory
+            AuditLogService.record(
+                actor=user,
+                action=f"Dispatched Patrol Unit to {zone_name} (Officer: {officer.username})",
+                event_type=AuditEventType.PATROL_DISPATCHED,
+                category=AuditEventCategory.PATROL,
+                resource_type="PatrolAssignment",
+                resource_id=str(assignment.id),
+                station=assignment.station or getattr(user, 'station', None),
+                description=f"Patrol deployment created for officer {officer.username} in {zone_name} (Priority: {priority})",
+                metadata={'assignment_id': assignment.id, 'officer_id': officer.id, 'officer_username': officer.username, 'zone_name': zone_name, 'priority': priority}
+            )
+        except Exception:
+            pass
+        return assignment
 
     @staticmethod
     def get_all_patrols(user):
@@ -59,6 +76,30 @@ class PatrolService:
             new_status=status,
             actor=user
         )
+
+        try:
+            from intelligence.audit_service import AuditLogService
+            from intelligence.models import AuditEventType, AuditEventCategory
+            event_type_map = {
+                'ACKNOWLEDGED': AuditEventType.PATROL_ACKNOWLEDGED,
+                'ARRIVED': AuditEventType.PATROL_ARRIVED,
+                'COMPLETED': AuditEventType.PATROL_COMPLETED,
+                'CANCELLED': AuditEventType.PATROL_CANCELLED,
+            }
+            evt = event_type_map.get(status, AuditEventType.PATROL_STATUS_CHANGED)
+            AuditLogService.record(
+                actor=user,
+                action=f"Patrol #{assignment.id} status changed: {old_status} -> {status}",
+                event_type=evt,
+                category=AuditEventCategory.PATROL,
+                resource_type="PatrolAssignment",
+                resource_id=str(assignment.id),
+                station=assignment.station or getattr(user, 'station', None),
+                description=f"Patrol assignment #{assignment.id} (Officer: {assignment.officer.username}) updated from {old_status} to {status}",
+                metadata={'assignment_id': assignment.id, 'old_status': old_status, 'new_status': status, 'officer_username': assignment.officer.username}
+            )
+        except Exception:
+            pass
 
         return assignment
 
@@ -270,4 +311,140 @@ class PatrolService:
             "route_geometry": route_geometry,
             "message": f"Successfully generated optimal {len(ordered_waypoints)}-stop patrol route."
         }
+
+    @staticmethod
+    def recommend_patrol_for_hotspot(user, zone_id=None, lat=None, lng=None, risk_level=None):
+        """
+        AI Patrol Dispatch Recommendation for Predicted Hotspots.
+        Calculates optimal patrol unit assignments considering:
+        - Proximity distance to hotspot
+        - Officer availability (active assignment count)
+        - Station jurisdiction affinity
+        - Risk severity multiplier
+        """
+        import math
+        from django.contrib.auth import get_user_model
+        from intelligence.models import RiskScore
+        from users.models import PoliceStation
+        from .models import PatrolAssignment, PatrolLocation
+
+        User = get_user_model()
+
+        target_lat = None
+        target_lng = None
+        target_zone_name = "Hotspot Target"
+        target_risk_level = risk_level or "HIGH"
+        target_risk_score = 75.0
+
+        if zone_id:
+            try:
+                zone = RiskScore.objects.get(id=zone_id)
+                target_lat = zone.center.y
+                target_lng = zone.center.x
+                target_zone_name = zone.zone_name
+                target_risk_level = zone.risk_level
+                target_risk_score = zone.score
+            except (RiskScore.DoesNotExist, ValueError):
+                pass
+
+        if target_lat is None and lat is not None and lng is not None:
+            try:
+                target_lat = float(lat)
+                target_lng = float(lng)
+            except (ValueError, TypeError):
+                pass
+
+        if target_lat is None or target_lng is None:
+            top_zone = RiskScore.objects.order_by('-score').first()
+            if top_zone:
+                target_lat = top_zone.center.y
+                target_lng = top_zone.center.x
+                target_zone_name = top_zone.zone_name
+                target_risk_level = top_zone.risk_level
+                target_risk_score = top_zone.score
+            else:
+                target_lat, target_lng = 23.0225, 72.5714
+
+        officers_qs = User.objects.filter(role__in=['PATROL', 'PATROL_OFFICER'], is_active=True).select_related('station')
+
+        if user.role == 'STATION' and user.station_id:
+            officers_qs = officers_qs.filter(station_id=user.station_id)
+
+        candidates = []
+        for off in officers_qs:
+            latest_ping = PatrolLocation.objects.filter(assignment__officer=off).order_by('-timestamp').first()
+            if latest_ping and latest_ping.location:
+                off_lat, off_lng = latest_ping.location.y, latest_ping.location.x
+                loc_source = "LIVE_GPS"
+                loc_time = latest_ping.timestamp
+            elif off.station and off.station.location:
+                off_lat, off_lng = off.station.location.y, off.station.location.x
+                loc_source = "STATION_BASE"
+                loc_time = None
+            else:
+                off_lat, off_lng = 23.0225, 72.5714
+                loc_source = "DEFAULT"
+                loc_time = None
+
+            d_lat = math.radians(target_lat - off_lat)
+            d_lon = math.radians(target_lng - off_lng)
+            a = math.sin(d_lat / 2)**2 + math.cos(math.radians(off_lat)) * math.cos(math.radians(target_lat)) * math.sin(d_lon / 2)**2
+            dist_km = 6371.0 * (2 * math.atan2(math.sqrt(a), math.sqrt(1 - a)))
+
+            active_count = PatrolAssignment.objects.filter(
+                officer=off,
+                status__in=['ASSIGNED', 'ACKNOWLEDGED', 'EN_ROUTE', 'ARRIVED']
+            ).count()
+
+            proximity_score = 100.0 / (1.0 + (dist_km * 0.4))
+            avail_multiplier = 1.0 if active_count == 0 else 0.55 if active_count == 1 else 0.25
+            station_match = bool(user.station_id and off.station_id == user.station_id)
+            affinity = 1.20 if station_match else 1.0
+            sev_multiplier = 1.30 if target_risk_level == 'CRITICAL' else 1.15 if target_risk_level == 'HIGH' else 1.0
+
+            suitability = round(proximity_score * avail_multiplier * affinity * sev_multiplier, 1)
+            eta_mins = max(2, round((dist_km / 30.0) * 60))
+
+            if active_count == 0:
+                reason = f"Available immediately (~{eta_mins} min ETA, {dist_km:.1f} km away)."
+            else:
+                reason = f"Active on {active_count} task(s) (~{eta_mins} min ETA, {dist_km:.1f} km away)."
+
+            candidates.append({
+                'officer_id': off.id,
+                'officer_name': off.username,
+                'badge_number': getattr(off, 'badge_number', None),
+                'station_id': off.station_id,
+                'station_name': off.station.name if off.station else None,
+                'current_location': {
+                    'lat': off_lat,
+                    'lng': off_lng,
+                    'source': loc_source,
+                    'timestamp': loc_time.isoformat() if loc_time else None
+                },
+                'distance_km': round(dist_km, 2),
+                'distance_meters': int(dist_km * 1000),
+                'estimated_arrival_minutes': eta_mins,
+                'active_assignments_count': active_count,
+                'is_available': active_count == 0,
+                'suitability_score': suitability,
+                'recommendation_reason': reason,
+            })
+
+        candidates.sort(key=lambda x: x['suitability_score'], reverse=True)
+
+        return {
+            'target_hotspot': {
+                'zone_id': zone_id,
+                'zone_name': target_zone_name,
+                'risk_level': target_risk_level,
+                'risk_score': target_risk_score,
+                'lat': target_lat,
+                'lng': target_lng,
+            },
+            'candidates_count': len(candidates),
+            'recommended_officer': candidates[0] if candidates else None,
+            'candidates': candidates,
+        }
+
 

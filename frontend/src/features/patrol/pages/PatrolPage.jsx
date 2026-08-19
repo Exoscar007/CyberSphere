@@ -90,6 +90,12 @@ export default function PatrolPage() {
   const [recommendLoading, setRecommendLoading] = useState(false);
   const [recommendations, setRecommendations] = useState(null);
 
+  // AI Hotspot Dispatch State
+  const [hotspots, setHotspots] = useState([]);
+  const [hotspotRecommendLoading, setHotspotRecommendLoading] = useState(false);
+  const [selectedHotspotId, setSelectedHotspotId] = useState('');
+
+
   // Route Optimization State
   const [optimizedRoute, setOptimizedRoute] = useState(null);
   const [routeLoading, setRouteLoading] = useState(false);
@@ -259,35 +265,17 @@ export default function PatrolPage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const incRes = await api.get('/api/crimes/incidents/');
+        const [incRes, assRes, hotRes] = await Promise.all([
+          api.get('/api/crimes/incidents/'),
+          api.get('/api/patrol/assignments/'),
+          api.get('/api/intelligence/risk-scores/').catch(() => ({ data: [] })),
+        ]);
         const incList = incRes.data || [];
         setIncidents(incList);
-
-        if (initialIncident) {
-          setSelectedIncidentId(String(initialIncident.id));
-          const coords = initialIncident.location?.coordinates || initialIncident.location_input?.coordinates;
-          if (coords && coords.length === 2) {
-            setMapCenter([coords[1], coords[0]]);
-            setDestination({ lat: coords[1], lng: coords[0] });
-          }
-          if (initialIncident.severity) {
-            setFormData((prev) => ({ ...prev, priority: initialIncident.severity }));
-          }
-        } else if (incList.length > 0 && !selectedIncidentId) {
-          const firstInc = incList[0];
-          setSelectedIncidentId(String(firstInc.id));
-          const coords = firstInc.location?.coordinates || firstInc.location_input?.coordinates;
-          if (coords && coords.length === 2) {
-            setMapCenter([coords[1], coords[0]]);
-            setDestination({ lat: coords[1], lng: coords[0] });
-          }
-          if (firstInc.severity) {
-            setFormData((prev) => ({ ...prev, priority: firstInc.severity }));
-          }
-        }
-
-        const assRes = await api.get('/api/patrol/assignments/');
+        setHotspots(hotRes.data || []);
         setAssignments(assRes.data || []);
+
+
 
         let patrolOfficers = [];
         try {
@@ -370,6 +358,37 @@ export default function PatrolPage() {
       setRecommendLoading(false);
     }
   };
+
+  const handleHotspotSelect = async (zoneId) => {
+    setSelectedHotspotId(zoneId);
+    if (!zoneId) return;
+    setHotspotRecommendLoading(true);
+    setError(null);
+    try {
+      const res = await api.get(`/api/patrol/recommend-for-hotspot/?zone_id=${zoneId}`);
+      const data = res.data;
+      const target = data.target_hotspot;
+      if (target && target.lat && target.lng) {
+        setDestination({ lat: target.lat, lng: target.lng });
+        setMapCenter([target.lat, target.lng]);
+        setFormData((prev) => ({
+          ...prev,
+          zone_name: target.zone_name,
+          priority: target.risk_level || 'HIGH',
+          instructions: `[AI PREDICTIVE DISPATCH] Patrol high-risk hotspot "${target.zone_name}" (Risk Score: ${target.risk_score}). Proactive visibility patrol.`,
+          officer: data.recommended_officer ? String(data.recommended_officer.officer_id) : prev.officer,
+        }));
+        if (data.recommended_officer && addToast) {
+          addToast(`AI Recommended unit ${data.recommended_officer.officer_name.toUpperCase()} for ${target.zone_name} (${data.recommended_officer.distance_km} km away)`, 'info');
+        }
+      }
+    } catch (err) {
+      if (addToast) addToast('Failed to fetch hotspot patrol recommendations', 'error');
+    } finally {
+      setHotspotRecommendLoading(false);
+    }
+  };
+
 
   const handleOptimizeRoute = async () => {
     setRouteLoading(true);
@@ -647,12 +666,40 @@ export default function PatrolPage() {
             )}
           </div>
 
+          {/* AI Predictive Hotspot Fast-Dispatch */}
+          {hotspots.length > 0 && (
+            <div style={{ padding: '8px 10px', backgroundColor: 'rgba(40, 85, 112, 0.08)', borderRadius: 'var(--radius-xs)', border: '1px solid var(--color-operational-border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                <span style={{ fontSize: '10px', fontWeight: '800', color: 'var(--palette-coastal-blue)', textTransform: 'uppercase', letterSpacing: '0.6px', fontFamily: 'var(--font-mono)' }}>
+                  ⚡ AI PREDICTIVE HOTSPOT DISPATCH
+                </span>
+                {hotspotRecommendLoading && (
+                  <span style={{ fontSize: '9.5px', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Optimizing...</span>
+                )}
+              </div>
+              <select
+                className="form-input"
+                style={{ fontSize: '11.5px', padding: '4px 8px', height: '30px' }}
+                value={selectedHotspotId}
+                onChange={(e) => handleHotspotSelect(e.target.value)}
+              >
+                <option value="">-- Deploy to Predicted High-Risk Zone --</option>
+                {hotspots.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.zone_name} [{h.risk_level || 'RISK'}: {h.score?.toFixed(0)}] — {h.factors?.seven_day_trend_pct || ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Incident Selector with Proximity Recommendation */}
           <div className="form-group" style={{ margin: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
               <label className="form-label" htmlFor="incident_select" style={{ margin: 0 }}>
                 Target Incident
               </label>
+
               <button
                 type="button"
                 onClick={handleRecommend}

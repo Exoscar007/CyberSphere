@@ -30,10 +30,42 @@ class AuthService:
     def login(username, password):
         user = authenticate(username=username, password=password)
         if not user:
+            try:
+                from intelligence.audit_service import AuditLogService
+                from intelligence.models import AuditEventType, AuditEventCategory
+                AuditLogService.record(
+                    action=f"Failed login attempt for username '{username}'",
+                    event_type=AuditEventType.LOGIN_FAILURE,
+                    category=AuditEventCategory.AUTH,
+                    resource_type="Auth",
+                    resource_id=username,
+                    status="FAILED",
+                    description=f"Authentication failed: Invalid credentials for username {username}",
+                    metadata={'username': username}
+                )
+            except Exception:
+                pass
             raise ValueError("Invalid credentials")
 
         if user.mfa_enabled:
             if user.mfa_locked_until and user.mfa_locked_until > timezone.now():
+                try:
+                    from intelligence.audit_service import AuditLogService
+                    from intelligence.models import AuditEventType, AuditEventCategory
+                    AuditLogService.record(
+                        actor=user,
+                        action=f"MFA locked attempt for '{username}'",
+                        event_type=AuditEventType.LOGIN_FAILURE,
+                        category=AuditEventCategory.AUTH,
+                        resource_type="Auth",
+                        resource_id=str(user.id),
+                        station=user.station,
+                        status="FAILED",
+                        description=f"Login blocked: Account locked due to repeated MFA failures until {user.mfa_locked_until}",
+                        metadata={'username': username, 'locked_until': str(user.mfa_locked_until)}
+                    )
+                except Exception:
+                    pass
                 raise ValueError("Too many verification attempts. Please try again later.")
             
             exp_time = timezone.now() + timedelta(minutes=5)
@@ -46,6 +78,23 @@ class AuthService:
             if isinstance(mfa_token, bytes):
                 mfa_token = mfa_token.decode('utf-8')
 
+            try:
+                from intelligence.audit_service import AuditLogService
+                from intelligence.models import AuditEventType, AuditEventCategory
+                AuditLogService.record(
+                    actor=user,
+                    action=f"MFA challenge issued for '{username}'",
+                    event_type=AuditEventType.MFA_CHALLENGE,
+                    category=AuditEventCategory.AUTH,
+                    resource_type="Auth",
+                    resource_id=str(user.id),
+                    station=user.station,
+                    description=f"MFA verification challenge required for user {username}",
+                    metadata={'username': username, 'user_id': user.id}
+                )
+            except Exception:
+                pass
+
             return {
                 'mfa_required': True,
                 'mfa_token': mfa_token,
@@ -53,6 +102,24 @@ class AuthService:
             }
 
         refresh = RefreshToken.for_user(user)
+        try:
+            from intelligence.audit_service import AuditLogService
+            from intelligence.models import AuditEventType, AuditEventCategory
+            AuditLogService.record(
+                actor=user,
+                action=f"User '{username}' logged in successfully",
+                event_type=AuditEventType.LOGIN_SUCCESS,
+                category=AuditEventCategory.AUTH,
+                resource_type="Auth",
+                resource_id=str(user.id),
+                station=user.station,
+                status="SUCCESS",
+                description=f"User {username} ({user.role}) authenticated successfully",
+                metadata={'username': username, 'role': user.role, 'station_id': user.station_id if user.station else None}
+            )
+        except Exception:
+            pass
+
         return {
             'mfa_required': False,
             'refresh': str(refresh),
@@ -90,6 +157,24 @@ class AuthService:
                 user.mfa_locked_until = timezone.now() + timedelta(minutes=15)
             user.save(update_fields=['mfa_failed_attempts', 'mfa_locked_until'])
 
+            try:
+                from intelligence.audit_service import AuditLogService
+                from intelligence.models import AuditEventType, AuditEventCategory
+                AuditLogService.record(
+                    actor=user,
+                    action=f"MFA verification failed for '{user.username}'",
+                    event_type=AuditEventType.MFA_VERIFY_FAILURE,
+                    category=AuditEventCategory.AUTH,
+                    resource_type="Auth",
+                    resource_id=str(user.id),
+                    station=user.station,
+                    status="FAILED",
+                    description=f"MFA OTP verification failed for user {user.username} (attempt {user.mfa_failed_attempts})",
+                    metadata={'username': user.username, 'failed_attempts': user.mfa_failed_attempts}
+                )
+            except Exception:
+                pass
+
             if user.mfa_failed_attempts >= 5:
                 raise ValueError("Too many verification attempts. Please try again later.")
             raise ValueError("That verification code is invalid. Please try again.")
@@ -99,6 +184,25 @@ class AuthService:
         user.save(update_fields=['mfa_failed_attempts', 'mfa_locked_until'])
 
         refresh = RefreshToken.for_user(user)
+
+        try:
+            from intelligence.audit_service import AuditLogService
+            from intelligence.models import AuditEventType, AuditEventCategory
+            AuditLogService.record(
+                actor=user,
+                action=f"User '{user.username}' completed MFA login",
+                event_type=AuditEventType.MFA_VERIFY_SUCCESS,
+                category=AuditEventCategory.AUTH,
+                resource_type="Auth",
+                resource_id=str(user.id),
+                station=user.station,
+                status="SUCCESS",
+                description=f"User {user.username} ({user.role}) successfully completed MFA verification",
+                metadata={'username': user.username, 'role': user.role, 'station_id': user.station_id if user.station else None}
+            )
+        except Exception:
+            pass
+
         return {
             'access': str(refresh.access_token),
             'refresh': str(refresh),
@@ -132,6 +236,23 @@ class AuthService:
         user.mfa_locked_until = None
         user.save(update_fields=['mfa_secret', 'mfa_enabled', 'mfa_failed_attempts', 'mfa_locked_until'])
 
+        try:
+            from intelligence.audit_service import AuditLogService
+            from intelligence.models import AuditEventType, AuditEventCategory
+            AuditLogService.record(
+                actor=user,
+                action=f"User '{user.username}' enabled MFA",
+                event_type=AuditEventType.MFA_ENABLED,
+                category=AuditEventCategory.AUTH,
+                resource_type="Auth",
+                resource_id=str(user.id),
+                station=user.station,
+                description=f"Multi-factor authentication enabled for account {user.username}",
+                metadata={'username': user.username}
+            )
+        except Exception:
+            pass
+
         return {
             'mfa_enabled': True,
             'message': "Multi-factor authentication successfully enabled.",
@@ -152,6 +273,23 @@ class AuthService:
         user.mfa_failed_attempts = 0
         user.mfa_locked_until = None
         user.save(update_fields=['mfa_secret', 'mfa_enabled', 'mfa_failed_attempts', 'mfa_locked_until'])
+
+        try:
+            from intelligence.audit_service import AuditLogService
+            from intelligence.models import AuditEventType, AuditEventCategory
+            AuditLogService.record(
+                actor=user,
+                action=f"User '{user.username}' disabled MFA",
+                event_type=AuditEventType.MFA_DISABLED,
+                category=AuditEventCategory.AUTH,
+                resource_type="Auth",
+                resource_id=str(user.id),
+                station=user.station,
+                description=f"Multi-factor authentication disabled for account {user.username}",
+                metadata={'username': user.username}
+            )
+        except Exception:
+            pass
 
         return {
             'mfa_enabled': False,
